@@ -32,7 +32,7 @@ VERBOSE_DEBUG = True         # Set to False to reduce debug output
 LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
 
 # Amount matching tolerance (for rounding differences)
-AMOUNT_TOLERANCE = 0.0  # Set to 0 for exact matching, or higher for tolerance
+AMOUNT_TOLERANCE = 0.01  # Set to 0 for exact matching, or higher for tolerance
 
 # =============================================================================
 # END CONFIGURATION SECTION
