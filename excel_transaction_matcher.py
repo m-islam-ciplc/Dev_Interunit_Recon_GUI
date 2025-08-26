@@ -13,23 +13,26 @@ import argparse
 # =============================================================================
 
 # Input file paths - Update these to point to your Excel files
-INPUT_FILE1_PATH = "New Folder/Interunit GeoTex.xlsx"
-INPUT_FILE2_PATH = "New Folder/Interunit Steel.xlsx"
+INPUT_FILE1_PATH = "Input Files/Interunit GeoTex.xlsx"
+INPUT_FILE2_PATH = "Input Files/Interunit Steel.xlsx"
 
 # Output folder - Where to save the matched files
-OUTPUT_FOLDER = "New Folder"
+OUTPUT_FOLDER = "Output"
 
 # File naming patterns for output files
 OUTPUT_SUFFIX = "_MATCHED.xlsx"
 SIMPLE_SUFFIX = "_SIMPLE.xlsx"
 
 # Processing options
-CREATE_SIMPLE_FILES = True  # Set to False if you don't want simple test files
+CREATE_SIMPLE_FILES = False  # Set to False if you don't want simple test files
 CREATE_ALT_FILES = False     # Set to False if you don't want alternative files
 VERBOSE_DEBUG = True         # Set to False to reduce debug output
 
 # LC Number extraction pattern (modify if your LC numbers have different format)
 LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
+
+# Amount matching tolerance (for rounding differences)
+AMOUNT_TOLERANCE = 0.0  # Set to 0 for exact matching, or higher for tolerance
 
 # =============================================================================
 # END CONFIGURATION SECTION
@@ -48,6 +51,7 @@ def print_configuration():
     print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
+    print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")
     print("=" * 60)
 
 def update_configuration():
@@ -62,6 +66,7 @@ def update_configuration():
     print("7. CREATE_ALT_FILES - Whether to create alternative files")
     print("8. VERBOSE_DEBUG - Whether to show detailed debug output")
     print("9. LC_PATTERN - Regex pattern for LC number extraction")
+    print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")
 
 class ExcelTransactionMatcher:
     """
@@ -278,27 +283,64 @@ class ExcelTransactionMatcher:
                     header_row1 = transactions1.iloc[block_header1]
                     header_row2 = transactions2.iloc[block_header2]
                     
-                    match_counter += 1
+                    # Extract amounts from both files
+                    file1_debit = header_row1.iloc[7] if pd.notna(header_row1.iloc[7]) else 0
+                    file1_credit = header_row1.iloc[8] if pd.notna(header_row1.iloc[8]) else 0
+                    file2_debit = header_row2.iloc[7] if pd.notna(header_row2.iloc[7]) else 0
+                    file2_credit = header_row2.iloc[8] if pd.notna(header_row2.iloc[8]) else 0
                     
-                    # Debug: Print the actual row data to see what we're working with   
-                    print(f"\nDEBUG: LC {lc1} match found:")
-                    print(f"  File1 Description Row {idx1} → Block Header Row {block_header1}: Date={header_row1.iloc[0]}, Particulars={header_row1.iloc[1]}")
-                    print(f"  File2 Description Row {idx2} → Block Header Row {block_header2}: Date={header_row2.iloc[0]}, Particulars={header_row2.iloc[1]}")
+                    # Determine transaction types and amounts
+                    # Lender: Has Debit amount (Dr), Borrower: Has Credit amount (Cr)
+                    file1_is_lender = file1_debit > 0
+                    file1_is_borrower = file1_credit > 0
+                    file2_is_lender = file2_debit > 0
+                    file2_is_borrower = file2_credit > 0
                     
-                    matches.append({
-                        'match_id': f"M{match_counter:03d}",  # Unique match ID
-                        'File1_Index': block_header1,  # This is the transaction block header row
-                        'File2_Index': block_header2,  # This is the transaction block header row
-                        'LC_Number': lc1,
-                        'File1_Date': header_row1.iloc[0],  # First column (Date)
-                        'File1_Description': header_row1.iloc[2],  # Third column (Description)
-                        'File1_Debit': header_row1.iloc[7],  # Eighth column (Debit)
-                        'File1_Credit': header_row1.iloc[8],  # Ninth column (Credit)
-                        'File2_Date': header_row2.iloc[0],  # First column (Date)
-                        'File2_Description': header_row2.iloc[2],  # Third column (Description)
-                        'File2_Debit': header_row2.iloc[7],  # Eighth column (Debit)
-                        'File2_Credit': header_row2.iloc[8],  # Ninth column (Credit)
-                    })
+                    # Get the actual amounts
+                    file1_amount = file1_debit if file1_is_lender else file1_credit
+                    file2_amount = file2_debit if file2_is_lender else file2_credit
+                    
+                    # CRITICAL: Only create a match if:
+                    # 1. One file is lender (Dr) and other is borrower (Cr)
+                    # 2. The amounts are the same (within tolerance)
+                    if ((file1_is_lender and file2_is_borrower) or (file1_is_borrower and file2_is_lender)):
+                        # Check if amounts match (within configured tolerance for rounding)
+                        if abs(file1_amount - file2_amount) < AMOUNT_TOLERANCE:
+                            match_counter += 1
+                            
+                            # Debug: Print the actual row data to see what we're working with   
+                            print(f"\nDEBUG: LC {lc1} VALID match found (amounts match):")
+                            print(f"  File1 Description Row {idx1} → Block Header Row {block_header1}: Date={header_row1.iloc[0]}, Particulars={header_row1.iloc[1]}")
+                            print(f"  File2 Description Row {idx2} → Block Header Row {block_header2}: Date={header_row2.iloc[0]}, Particulars={header_row2.iloc[1]}")
+                            print(f"  Amounts: File1={file1_amount} ({'Lender' if file1_is_lender else 'Borrower'}), File2={file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
+                            
+                            matches.append({
+                                'match_id': f"M{match_counter:03d}",  # Unique match ID
+                                'File1_Index': block_header1,  # This is the transaction block header row
+                                'File2_Index': block_header2,  # This is the transaction block header row
+                                'LC_Number': lc1,
+                                'File1_Date': header_row1.iloc[0],  # First column (Date)
+                                'File1_Description': header_row1.iloc[2],  # Third column (Description)
+                                'File1_Debit': header_row1.iloc[7],  # Eighth column (Debit)
+                                'File1_Credit': header_row1.iloc[8],  # Ninth column (Credit)
+                                'File2_Date': header_row2.iloc[0],  # First column (Date)
+                                'File2_Description': header_row2.iloc[2],  # Third column (Description)
+                                'File2_Debit': header_row2.iloc[7],  # Eighth column (Debit)
+                                'File2_Credit': header_row2.iloc[8],  # Ninth column (Credit)
+                                'File1_Amount': file1_amount,
+                                'File2_Amount': file2_amount,
+                                'File1_Type': 'Lender' if file1_is_lender else 'Borrower',
+                                'File2_Type': 'Lender' if file2_is_lender else 'Borrower'
+                            })
+                        else:
+                            print(f"\nDEBUG: LC {lc1} REJECTED - amounts don't match:")
+                            print(f"  File1: {file1_amount} ({'Lender' if file1_is_lender else 'Borrower'})")
+                            print(f"  File2: {file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
+                            print(f"  Difference: {abs(file1_amount - file2_amount)}")
+                    else:
+                        print(f"\nDEBUG: LC {lc1} REJECTED - transaction types don't match:")
+                        print(f"  File1: {'Lender' if file1_is_lender else 'Borrower' if file1_is_borrower else 'Neither'}")
+                        print(f"  File2: {'Lender' if file2_is_lender else 'Borrower' if file2_is_borrower else 'Neither'}")
         
         print(f"\nFound {len(matches)} potential LC matches!")
         
@@ -339,15 +381,9 @@ class ExcelTransactionMatcher:
     
     def create_audit_info(self, match):
         """Create audit info JSON string for a match."""
-        # Determine which file has the lender amount and which has borrower amount
-        file1_debit = match['File1_Debit'] if pd.notna(match['File1_Debit']) else 0
-        file1_credit = match['File1_Credit'] if pd.notna(match['File1_Credit']) else 0
-        file2_debit = match['File2_Debit'] if pd.notna(match['File2_Debit']) else 0
-        file2_credit = match['File2_Credit'] if pd.notna(match['File2_Credit']) else 0
-        
-        # Lender amount is the Debit amount, Borrower amount is the Credit amount
-        lender_amount = max(file1_debit, file2_debit)
-        borrower_amount = max(file1_credit, file2_credit)
+        # Use the validated amounts from the matching process
+        lender_amount = match['File1_Amount'] if match['File1_Type'] == 'Lender' else match['File2_Amount']
+        borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
         
         audit_info = {
             "match_type": "LC",
