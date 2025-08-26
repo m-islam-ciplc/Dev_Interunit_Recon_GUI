@@ -569,17 +569,49 @@ class ExcelTransactionMatcher:
         self._preserve_tally_date_format(file2_matched)
         
         # Create output with metadata + matched transactions
-        with pd.ExcelWriter(output_file1) as writer:
+        with pd.ExcelWriter(output_file1, engine='openpyxl') as writer:
             # Write metadata
             self.metadata1.to_excel(writer, sheet_name='Sheet1', index=False, header=False)
             # Write matched transactions (skip first 8 rows to make room for metadata)
             file1_matched.to_excel(writer, sheet_name='Sheet1', index=False, header=True, startrow=8)
-        
-        with pd.ExcelWriter(output_file2) as writer:
+            
+            # Get the worksheet to set column widths
+            worksheet = writer.sheets['Sheet1']
+            # Set Particulars column width to 100 pixels (approximately 13.5 Excel units)
+            # After adding Match ID and Audit Info, Particulars is at column D (4th column)
+            worksheet.column_dimensions['A'].width = 9.00
+            worksheet.column_dimensions['B'].width = 30.00
+            worksheet.column_dimensions['C'].width = 12.00
+            worksheet.column_dimensions['D'].width = 10.00
+            worksheet.column_dimensions['E'].width = 60.00
+            worksheet.column_dimensions['F'].width = 5.00
+            worksheet.column_dimensions['G'].width = 5.00
+            worksheet.column_dimensions['H'].width = 9.00
+            worksheet.column_dimensions['I'].width = 9.00
+            worksheet.column_dimensions['J'].width = 9.00
+            worksheet.column_dimensions['K'].width = 9.00
+            worksheet.column_dimensions['L'].width = 25.00
+        with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
             self.metadata2.to_excel(writer, sheet_name='Sheet1', index=False, header=False)
             # Write matched transactions (skip first 8 rows to make room for metadata)
             file2_matched.to_excel(writer, sheet_name='Sheet1', index=False, header=True, startrow=8)
+            
+            # Get the worksheet to set column widths
+            worksheet = writer.sheets['Sheet1']
+            # Set column widths for all columns
+            worksheet.column_dimensions['A'].width = 9.00
+            worksheet.column_dimensions['B'].width = 30.00
+            worksheet.column_dimensions['C'].width = 12.00
+            worksheet.column_dimensions['D'].width = 10.00
+            worksheet.column_dimensions['E'].width = 60.00
+            worksheet.column_dimensions['F'].width = 5.00
+            worksheet.column_dimensions['G'].width = 5.00
+            worksheet.column_dimensions['H'].width = 9.00
+            worksheet.column_dimensions['I'].width = 9.00
+            worksheet.column_dimensions['J'].width = 9.00
+            worksheet.column_dimensions['K'].width = 9.00
+            worksheet.column_dimensions['L'].width = 25.00
         
         # Also create a simple version without metadata to test (if enabled)
         if CREATE_SIMPLE_FILES:
