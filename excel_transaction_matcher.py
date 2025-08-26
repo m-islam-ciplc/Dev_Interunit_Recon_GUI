@@ -83,22 +83,26 @@ class ExcelTransactionMatcher:
         
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
-        # Read everything first
-        full_df = pd.read_excel(file_path, header=None)
-        
+        # Read everything first - preserve date format by reading as strings
+        full_df = pd.read_excel(file_path, header=None, converters={0: str})
+
         # Extract metadata (rows 0-7, which are Excel rows 1-8)
         metadata = full_df.iloc[0:8, :]
-        
+
         # Extract transaction data (rows 8+, which are Excel rows 9+)
         transactions = full_df.iloc[8:, :]
-        
+
         # Set first row as headers and remove it from data
         transactions.columns = transactions.iloc[0]
         transactions = transactions.iloc[1:].reset_index(drop=True)
-        
+
         # DEBUG: Show what columns we actually have
         print(f"DEBUG: Columns after transformation: {list(transactions.columns)}")
-        
+
+        # DEBUG: Show actual date values from first few rows
+        print(f"DEBUG: First 5 date values (raw): {transactions.iloc[:5, 0].tolist()}")
+        print(f"DEBUG: Date column data type: {transactions.iloc[0, 0].__class__.__name__}")
+
         return metadata, transactions
     
     def extract_lc_numbers(self, description_series):
@@ -394,6 +398,45 @@ class ExcelTransactionMatcher:
         }
         return json.dumps(audit_info)
     
+    def _preserve_tally_date_format(self, transactions_df: pd.DataFrame):
+        """Ensure dates are in Tally format (e.g., '01/Jul/2024') before saving."""
+        if len(transactions_df.columns) > 2:  # After adding Match ID and Audit Info columns
+            # Date column is now at index 2 (third column) after adding Match ID and Audit Info
+            date_col = transactions_df.iloc[:, 2]  # Third column is date
+            
+            # Convert any datetime objects or datetime strings back to Tally format strings
+            def format_tally_date(date_val):
+                if pd.isna(date_val):
+                    return date_val
+                
+                # If it's already a Tally format string, keep it
+                if isinstance(date_val, str) and '/' in str(date_val) and len(str(date_val)) <= 12:
+                    return date_val
+                
+                # If it's a datetime object, convert to Tally format
+                if hasattr(date_val, 'strftime'):
+                    return date_val.strftime('%d/%b/%Y')
+                
+                # If it's a datetime string (like '2024-07-01 00:00:00'), parse and convert
+                if isinstance(date_val, str) and ('-' in str(date_val) or ':' in str(date_val)):
+                    try:
+                        # Parse the datetime string and convert to Tally format
+                        from datetime import datetime
+                        parsed_date = pd.to_datetime(date_val)
+                        return parsed_date.strftime('%d/%b/%Y')
+                    except:
+                        return date_val
+                
+                return date_val
+            
+            # Apply formatting to date column
+            transactions_df.iloc[:, 2] = date_col.apply(format_tally_date)
+            
+            if VERBOSE_DEBUG:
+                print(f"DEBUG: Date format preservation applied. Sample dates: {transactions_df.iloc[:3, 2].tolist()}")
+                print(f"DEBUG: Date column index: 2, column name: {transactions_df.columns[2]}")
+                print(f"DEBUG: Date types after conversion: {[type(x) for x in transactions_df.iloc[:3, 2]]}")
+
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
         if not matches:
@@ -519,6 +562,11 @@ class ExcelTransactionMatcher:
                     print(f"File1 - Row {idx} Audit Info: '{file1_matched.iloc[idx, 1]}'")
             else:
                 print("No populated rows found in File1")
+        
+        # Preserve Tally date format before saving
+        print("\n=== PRESERVING TALLY DATE FORMAT ===")
+        self._preserve_tally_date_format(file1_matched)
+        self._preserve_tally_date_format(file2_matched)
         
         # Create output with metadata + matched transactions
         with pd.ExcelWriter(output_file1) as writer:
