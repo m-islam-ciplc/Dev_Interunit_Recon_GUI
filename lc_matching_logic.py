@@ -9,7 +9,7 @@ class LCMatchingLogic:
     def __init__(self):
         self.amount_tolerance = AMOUNT_TOLERANCE
     
-    def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2, start_counter=0):
+    def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2):
         """Find potential LC number matches between the two files."""
         # Filter rows with LC numbers
         lc_transactions1 = transactions1[lc_numbers1.notna()].copy()
@@ -20,7 +20,7 @@ class LCMatchingLogic:
         
         # Find matches
         matches = []
-        match_counter = start_counter
+        match_counter = 0
         
         for idx1, lc1 in enumerate(lc_numbers1):
             if not lc1:
