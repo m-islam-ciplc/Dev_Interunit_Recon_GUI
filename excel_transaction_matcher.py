@@ -248,8 +248,9 @@ class ExcelTransactionMatcher:
         description_col2 = self.transactions2.iloc[:, 2]  # 3rd column
         
         # Only extract LC numbers from rows that have actual transaction data (not metadata rows)
-        self.transactions1['LC_Number'] = self.extract_lc_numbers_with_validation(description_col1, self.transactions1)
-        self.transactions2['LC_Number'] = self.extract_lc_numbers_with_validation(description_col2, self.transactions2)
+        # Extract LC numbers for matching (but don't add as a separate column)
+        lc_numbers1 = self.extract_lc_numbers_with_validation(description_col1, self.transactions1)
+        lc_numbers2 = self.extract_lc_numbers_with_validation(description_col2, self.transactions2)
         
         # Identify transaction blocks
         blocks1 = self.identify_transaction_blocks(self.transactions1)
@@ -258,15 +259,15 @@ class ExcelTransactionMatcher:
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
         
-        return self.transactions1, self.transactions2, blocks1, blocks2
+        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2
     
     def find_potential_matches(self):
         """Find potential LC number matches between the two files."""
-        transactions1, transactions2, blocks1, blocks2 = self.process_files()
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2 = self.process_files()
         
         # Filter rows with LC numbers
-        lc_transactions1 = transactions1[transactions1['LC_Number'].notna()].copy()
-        lc_transactions2 = transactions2[transactions2['LC_Number'].notna()].copy()
+        lc_transactions1 = transactions1[lc_numbers1.notna()].copy()
+        lc_transactions2 = transactions2[lc_numbers2.notna()].copy()
         
         print(f"\nFile 1: {len(lc_transactions1)} transactions with LC numbers")
         print(f"File 2: {len(lc_transactions2)} transactions with LC numbers")
@@ -275,10 +276,12 @@ class ExcelTransactionMatcher:
         matches = []
         match_counter = 0
         
-        for idx1, row1 in lc_transactions1.iterrows():
-            lc1 = row1['LC_Number']
-            for idx2, row2 in lc_transactions2.iterrows():
-                lc2 = row2['LC_Number']
+        for idx1, lc1 in enumerate(lc_numbers1):
+            if not lc1:
+                continue
+            for idx2, lc2 in enumerate(lc_numbers2):
+                if not lc2:
+                    continue
                 if lc1 == lc2:
                     # Find the transaction block header row for each LC
                     # This is the row with date and particulars (Dr/Cr)
@@ -452,7 +455,6 @@ class ExcelTransactionMatcher:
         worksheet.column_dimensions['I'].width = 9.00
         worksheet.column_dimensions['J'].width = 9.00
         worksheet.column_dimensions['K'].width = 11.22
-        worksheet.column_dimensions['L'].width = 25.00
 
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
