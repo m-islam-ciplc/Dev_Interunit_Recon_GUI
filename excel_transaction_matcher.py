@@ -166,6 +166,54 @@ class ExcelTransactionMatcher:
         
         return pd.Series(lc_numbers)
     
+    def extract_lc_numbers_from_narration(self, file_path):
+        """Extract LC numbers from narration rows (non-bold Column C) using openpyxl formatting."""
+        lc_numbers = []
+        lc_parent_rows = []
+        
+        # Load workbook with openpyxl to access formatting
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        
+        for row in range(9, ws.max_row + 1):  # Start from row 9 (after headers)
+            particulars_cell = ws.cell(row=row, column=2)
+            desc_cell = ws.cell(row=row, column=3)
+            
+            # Check if this is a narration row (non-bold Column C)
+            is_narration = (desc_cell.value and 
+                           desc_cell.font and 
+                           not desc_cell.font.bold)
+            
+            if is_narration:
+                # This is a narration row, check for LC numbers
+                narration_text = str(desc_cell.value)
+                lc = self.extract_lc_numbers(pd.Series([narration_text])).iloc[0]
+                
+                if lc is not None:
+                    # Found LC in narration row, need to find parent transaction row
+                    parent_row = self.find_parent_transaction_row_with_formatting(ws, row)
+                    if parent_row is not None:
+                        print(f"DEBUG: LC {lc} at narration row {row} linked to parent row {parent_row}")
+                        lc_numbers.append(lc)
+                        lc_parent_rows.append(parent_row)
+                    else:
+                        print(f"DEBUG: LC {lc} at narration row {row} - NO PARENT FOUND!")
+                        lc_numbers.append(None)
+                        lc_parent_rows.append(None)
+                else:
+                    lc_numbers.append(None)
+                    lc_parent_rows.append(None)
+            else:
+                lc_numbers.append(None)
+                lc_parent_rows.append(None)
+        
+        wb.close()
+        
+        # Store parent row mapping for later use
+        self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
+        
+        return pd.Series(lc_numbers)
+    
     def find_parent_transaction_row(self, current_row, transactions_df):
         """Find the parent transaction row for a description row."""
         # Look backwards from current row to find the most recent transaction row
@@ -191,38 +239,75 @@ class ExcelTransactionMatcher:
         return None
     
     def identify_transaction_blocks(self, transactions_df):
-        """Identify transaction blocks based on date+Dr/Cr start and 'Entered By :' end."""
+        """Identify transaction blocks based on date+Dr/Cr start and next date+Dr/Cr end."""
         blocks = []
         current_block = []
         in_block = False
         
         for idx, row in transactions_df.iterrows():
-            # Check if row has date and Dr/Cr (block start)
-            has_date = pd.notna(row['Date'])
-            has_dr_cr = pd.notna(row['Particulars']) and str(row['Particulars']).strip() in ['Dr', 'Cr']
+            # Check if row has date in Col A and Dr/Cr in Col B (block start/end)
+            has_date = pd.notna(row.iloc[0])  # Col A (Date)
+            has_dr_cr = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
             
-            # Check if row contains 'Entered By :' (block end)
-            particulars = str(row['Particulars']) if pd.notna(row['Particulars']) else ''
-            is_block_end = 'Entered By :' in particulars
+            # Check if this is a new block start (date + Dr/Cr)
+            is_new_block_start = has_date and has_dr_cr
             
-            if has_date and has_dr_cr:
-                # Start new block
-                if current_block:
+            if is_new_block_start:
+                # If we're already in a block, end the current one
+                if in_block and current_block:
                     blocks.append(current_block)
+                
+                # Start new block
                 current_block = [row]
                 in_block = True
             elif in_block:
+                # Continue adding rows to current block
                 current_block.append(row)
-                if is_block_end:
-                    # End current block
-                    blocks.append(current_block)
-                    current_block = []
-                    in_block = False
         
-        # Add any remaining block
+        # Add the last block if it exists
         if current_block:
             blocks.append(current_block)
         
+        return blocks
+    
+    def identify_transaction_blocks_with_formatting(self, file_path):
+        """Identify transaction blocks using openpyxl to check bold formatting in Column C."""
+        blocks = []
+        
+        # Load workbook with openpyxl to access formatting
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        
+        current_block = []
+        in_block = False
+        
+        for row in range(9, ws.max_row + 1):  # Start from row 9 (after headers)
+            date_cell = ws.cell(row=row, column=1)
+            particulars_cell = ws.cell(row=row, column=2)
+            desc_cell = ws.cell(row=row, column=3)
+            
+            # Check if this is a transaction block header (Date + Dr/Cr + BOLD Col C)
+            has_date = date_cell.value is not None
+            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
+            has_bold_desc = desc_cell.font and desc_cell.font.bold
+            
+            if has_date and has_dr_cr and has_bold_desc:
+                # If we're already in a block, end the current one
+                if in_block and current_block:
+                    blocks.append(current_block)
+                
+                # Start new block
+                current_block = [row]
+                in_block = True
+            elif in_block:
+                # Continue adding rows to current block
+                current_block.append(row)
+        
+        # Add the last block if it exists
+        if current_block:
+            blocks.append(current_block)
+        
+        wb.close()
         return blocks
     
     def process_files(self):
@@ -244,19 +329,15 @@ class ExcelTransactionMatcher:
         # Let's check what's actually in the columns
         print(f"File 1 first row: {list(self.transactions1.iloc[0, :])}")
         
-        # Extract LC numbers from the correct column, but only for rows with actual transaction data
-        # We'll use column index 2 (3rd column) which should be the description
-        description_col1 = self.transactions1.iloc[:, 2]  # 3rd column
-        description_col2 = self.transactions2.iloc[:, 2]  # 3rd column
+        # Extract LC numbers from narration rows (non-bold Column C) using formatting
+        print("Extracting LC numbers from narration rows using formatting...")
+        lc_numbers1 = self.extract_lc_numbers_from_narration(self.file1_path)
+        lc_numbers2 = self.extract_lc_numbers_from_narration(self.file2_path)
         
-        # Only extract LC numbers from rows that have actual transaction data (not metadata rows)
-        # Extract LC numbers for matching (but don't add as a separate column)
-        lc_numbers1 = self.extract_lc_numbers_with_validation(description_col1, self.transactions1)
-        lc_numbers2 = self.extract_lc_numbers_with_validation(description_col2, self.transactions2)
-        
-        # Identify transaction blocks
-        blocks1 = self.identify_transaction_blocks(self.transactions1)
-        blocks2 = self.identify_transaction_blocks(self.transactions2)
+        # Identify transaction blocks using formatting
+        print("Identifying transaction blocks using formatting...")
+        blocks1 = self.identify_transaction_blocks_with_formatting(self.file1_path)
+        blocks2 = self.identify_transaction_blocks_with_formatting(self.file2_path)
         
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
@@ -279,8 +360,8 @@ class ExcelTransactionMatcher:
         # Look backwards from current row to find the most recent block header
         for row_idx in range(current_row, -1, -1):
             row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Date column
-            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Particulars column
+            has_date = pd.notna(row.iloc[0])  # Col A (Date)
+            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
             
             if has_date and has_particulars:
                 return row_idx
@@ -288,13 +369,31 @@ class ExcelTransactionMatcher:
         # If no header found looking backwards, look forwards
         for row_idx in range(current_row + 1, len(transactions_df)):
             row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Date column
-            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Particulars column
+            has_date = pd.notna(row.iloc[0])  # Col A (Date)
+            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
             
             if has_date and has_particulars:
                 return row_idx
         
         return current_row  # Fallback to current row if no header found
+    
+    def find_parent_transaction_row_with_formatting(self, ws, current_row):
+        """Find the parent transaction row for a narration row using openpyxl formatting."""
+        # Look backwards from current row to find the most recent transaction block header
+        for row_idx in range(current_row, 8, -1):  # Start from current_row, go back to row 9
+            date_cell = ws.cell(row=row_idx, column=1)
+            particulars_cell = ws.cell(row=row_idx, column=2)
+            desc_cell = ws.cell(row=row_idx, column=3)
+            
+            # Check if this is a transaction block header (Date + Dr/Cr + BOLD Col C)
+            has_date = date_cell.value is not None
+            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
+            has_bold_desc = desc_cell.font and desc_cell.font.bold
+            
+            if has_date and has_dr_cr and has_bold_desc:
+                return row_idx
+        
+        return None
     
     def create_audit_info(self, match):
         """Create audit info JSON string for a match."""
