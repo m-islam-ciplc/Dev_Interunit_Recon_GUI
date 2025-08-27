@@ -439,6 +439,21 @@ class ExcelTransactionMatcher:
                 print(f"DEBUG: Date column index: 2, column name: {transactions_df.columns[2]}")
                 print(f"DEBUG: Date types after conversion: {[type(x) for x in transactions_df.iloc[:3, 2]]}")
 
+    def _set_column_widths(self, worksheet):
+        """Set column widths for the worksheet"""
+        worksheet.column_dimensions['A'].width = 9.00
+        worksheet.column_dimensions['B'].width = 30.00
+        worksheet.column_dimensions['C'].width = 12.00
+        worksheet.column_dimensions['D'].width = 10.00
+        worksheet.column_dimensions['E'].width = 60.00
+        worksheet.column_dimensions['F'].width = 5.00
+        worksheet.column_dimensions['G'].width = 5.00
+        worksheet.column_dimensions['H'].width = 12.78
+        worksheet.column_dimensions['I'].width = 9.00
+        worksheet.column_dimensions['J'].width = 9.00
+        worksheet.column_dimensions['K'].width = 11.22
+        worksheet.column_dimensions['L'].width = 25.00
+
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
         if not matches:
@@ -579,19 +594,7 @@ class ExcelTransactionMatcher:
             
             # Get the worksheet to set column widths
             worksheet = writer.sheets['Sheet1']
-            # Set column widths for all columns
-            worksheet.column_dimensions['A'].width = 9.00
-            worksheet.column_dimensions['B'].width = 30.00
-            worksheet.column_dimensions['C'].width = 12.00
-            worksheet.column_dimensions['D'].width = 10.00
-            worksheet.column_dimensions['E'].width = 60.00
-            worksheet.column_dimensions['F'].width = 5.00
-            worksheet.column_dimensions['G'].width = 5.00
-            worksheet.column_dimensions['H'].width = 9.00
-            worksheet.column_dimensions['I'].width = 9.00
-            worksheet.column_dimensions['J'].width = 9.00
-            worksheet.column_dimensions['K'].width = 9.00
-            worksheet.column_dimensions['L'].width = 25.00
+            self._set_column_widths(worksheet)
             
             # Enable text wrapping for columns B (Audit Info) and E (Description)
             # Note: wrap_text is a cell property, not column property
@@ -610,6 +613,7 @@ class ExcelTransactionMatcher:
                         
                 except Exception as e:
                     print(f"Error setting text wrapping for row {row}: {e}")
+            
                     
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
@@ -619,19 +623,7 @@ class ExcelTransactionMatcher:
             
             # Get the worksheet to set column widths
             worksheet = writer.sheets['Sheet1']
-            # Set column widths for all columns
-            worksheet.column_dimensions['A'].width = 9.00
-            worksheet.column_dimensions['B'].width = 30.00
-            worksheet.column_dimensions['C'].width = 12.00
-            worksheet.column_dimensions['D'].width = 10.00
-            worksheet.column_dimensions['E'].width = 60.00
-            worksheet.column_dimensions['F'].width = 5.00
-            worksheet.column_dimensions['G'].width = 5.00
-            worksheet.column_dimensions['H'].width = 9.00
-            worksheet.column_dimensions['I'].width = 9.00
-            worksheet.column_dimensions['J'].width = 9.00
-            worksheet.column_dimensions['K'].width = 9.00
-            worksheet.column_dimensions['L'].width = 25.00
+            self._set_column_widths(worksheet)
             
             # Enable text wrapping for columns B (Audit Info) and E (Description)
             # Note: wrap_text is a cell property, not column property
@@ -650,6 +642,7 @@ class ExcelTransactionMatcher:
                         
                 except Exception as e:
                     print(f"Error setting text wrapping for row {row}: {e}")
+            
         
         # Also create a simple version without metadata to test (if enabled)
         if CREATE_SIMPLE_FILES:
