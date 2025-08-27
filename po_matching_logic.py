@@ -1,35 +1,56 @@
 import pandas as pd
+import re
+from typing import Optional
 
 # Configuration
 AMOUNT_TOLERANCE = 0.01  # Amount matching tolerance for rounding differences
 
-class LCMatchingLogic:
-    """Handles the logic for finding LC number matches between two files."""
+class POMatchingLogic:
+    """Handles the logic for finding Purchase Order number matches between two files."""
     
     def __init__(self):
         self.amount_tolerance = AMOUNT_TOLERANCE
+        # Pattern for PO numbers: ABC/PO/123/456 or ABC/PO/2024/10/29964
+        # Allow 2 or more numeric segments after /PO
+        self.po_pattern = r'\b[A-Z]{2,4}/PO(?:/\d+){2,}\b'
     
-    def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2, start_counter=0):
-        """Find potential LC number matches between the two files."""
-        # Filter rows with LC numbers
-        lc_transactions1 = transactions1[lc_numbers1.notna()].copy()
-        lc_transactions2 = transactions2[lc_numbers2.notna()].copy()
+    def extract_po_numbers(self, particulars_series: pd.Series) -> pd.Series:
+        """Extract PO numbers from a series of particulars strings."""
+        def extract_single_po(particulars: str) -> Optional[str]:
+            """Extract PO number from a single particulars string."""
+            if pd.isna(particulars) or not particulars:
+                return None
+            
+            try:
+                match = re.search(self.po_pattern, str(particulars).upper())
+                return match.group() if match else None
+            except Exception as e:
+                print(f"DEBUG: PO regex error: {e} with pattern '{self.po_pattern}' and text '{particulars}'")
+                return None
         
-        print(f"\nFile 1: {len(lc_transactions1)} transactions with LC numbers")
-        print(f"File 2: {len(lc_transactions2)} transactions with LC numbers")
+        return particulars_series.apply(extract_single_po)
+    
+    def find_potential_matches(self, transactions1, transactions2, po_numbers1, po_numbers2, start_counter=0):
+        """Find potential PO number matches between the two files."""
+        # Filter rows with PO numbers
+        po_transactions1 = transactions1[po_numbers1.notna()].copy()
+        po_transactions2 = transactions2[po_numbers2.notna()].copy()
+        
+        print(f"\nFile 1: {len(po_transactions1)} transactions with PO numbers")
+        print(f"File 2: {len(po_transactions2)} transactions with PO numbers")
         
         # Find matches
         matches = []
         match_counter = start_counter
         
-        for idx1, lc1 in enumerate(lc_numbers1):
-            if not lc1:
+        for idx1, po1 in enumerate(po_numbers1):
+            if not po1:
                 continue
-            for idx2, lc2 in enumerate(lc_numbers2):
-                if not lc2:
+            for idx2, po2 in enumerate(po_numbers2):
+                if not po2:
                     continue
-                if lc1 == lc2:
-                    # Find the transaction block header row for each LC
+                if po1 == po2:
+                    # Find the transaction block header row for each PO
                     # This is the row with date and particulars (Dr/Cr)
                     block_header1 = self.find_transaction_block_header(idx1, transactions1)
                     block_header2 = self.find_transaction_block_header(idx2, transactions2)
@@ -64,16 +85,16 @@ class LCMatchingLogic:
                             match_counter += 1
                             
                             # Debug: Print the actual row data to see what we're working with   
-                            print(f"\nDEBUG: LC {lc1} VALID match found (amounts match):")
+                            print(f"\nDEBUG: PO {po1} VALID match found (amounts match):")
                             print(f"  File1 Description Row {idx1} → Block Header Row {block_header1}: Date={header_row1.iloc[0]}, Particulars={header_row1.iloc[1]}")
                             print(f"  File2 Description Row {idx2} → Block Header Row {block_header2}: Date={header_row2.iloc[0]}, Particulars={header_row2.iloc[1]}")
                             print(f"  Amounts: File1={file1_amount} ({'Lender' if file1_is_lender else 'Borrower'}), File2={file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
                             
                             matches.append({
-                                'match_id': f"M{match_counter:03d}",  # Unique match ID
+                                'match_id': f"M{match_counter:03d}",  # Unique match ID (M for sequential)
                                 'File1_Index': block_header1,  # This is the transaction block header row
                                 'File2_Index': block_header2,  # This is the transaction block header row
-                                'LC_Number': lc1,
+                                'PO_Number': po1,
                                 'File1_Date': header_row1.iloc[0],  # First column (Date)
                                 'File1_Description': header_row1.iloc[2],  # Third column (Description)
                                 'File1_Debit': header_row1.iloc[7],  # Eighth column (Debit)
@@ -88,23 +109,23 @@ class LCMatchingLogic:
                                 'File2_Type': 'Lender' if file2_is_lender else 'Borrower'
                             })
                         else:
-                            print(f"\nDEBUG: LC {lc1} REJECTED - amounts don't match:")
+                            print(f"\nDEBUG: PO {po1} REJECTED - amounts don't match:")
                             print(f"  File1: {file1_amount} ({'Lender' if file1_is_lender else 'Borrower'})")
                             print(f"  File2: {file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
                             print(f"  Difference: {abs(file1_amount - file2_amount)}")
                     else:
-                        print(f"\nDEBUG: LC {lc1} REJECTED - transaction types don't match:")
+                        print(f"\nDEBUG: PO {po1} REJECTED - transaction types don't match:")
                         print(f"  File1: {'Lender' if file1_is_lender else 'Borrower' if file1_is_borrower else 'Neither'}")
                         print(f"  File2: {'Lender' if file2_is_lender else 'Borrower' if file2_is_borrower else 'Neither'}")
         
-        print(f"\nFound {len(matches)} potential LC matches!")
+        print(f"\nFound {len(matches)} potential PO matches!")
         
         # Show some examples
         if matches:
-            print("\n=== SAMPLE MATCHES ===")
+            print("\n=== SAMPLE PO MATCHES ===")
             for i, match in enumerate(matches[:5]):  # Show first 5 matches
                 print(f"\nMatch {i+1}:")
-                print(f"LC Number: {match['LC_Number']}")
+                print(f"PO Number: {match['PO_Number']}")
                 print(f"File 1: {match['File1_Date']} - {str(match['File1_Description'])[:50]}...")
                 print(f"  Debit: {match['File1_Debit']}, Credit: {match['File1_Credit']}")
                 print(f"File 2: {match['File2_Date']} - {str(match['File2_Description'])[:50]}...")
@@ -138,3 +159,8 @@ class LCMatchingLogic:
         """Set the amount tolerance for matching."""
         self.amount_tolerance = tolerance
         print(f"Amount tolerance set to: {self.amount_tolerance}")
+    
+    def set_po_pattern(self, pattern):
+        """Set the PO number extraction pattern."""
+        self.po_pattern = pattern
+        print(f"PO pattern set to: {self.po_pattern}")

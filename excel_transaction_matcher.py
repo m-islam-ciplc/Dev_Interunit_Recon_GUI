@@ -10,6 +10,7 @@ import argparse
 from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
+from po_matching_logic import POMatchingLogic
 
 # =============================================================================
 # CONFIGURATION SECTION - MODIFY THESE PATHS AS NEEDED
@@ -84,6 +85,7 @@ class ExcelTransactionMatcher:
         self.metadata2 = None
         self.transactions2 = None
         self.matching_logic = LCMatchingLogic()
+        self.po_matching_logic = POMatchingLogic()
         
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
@@ -165,6 +167,21 @@ class ExcelTransactionMatcher:
         self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
         
         return pd.Series(lc_numbers)
+    
+    def extract_po_numbers_with_validation(self, description_col, transactions_df):
+        """Extract PO numbers from description column with validation."""
+        # Extract PO numbers using the PO matching logic
+        po_numbers = self.po_matching_logic.extract_po_numbers(description_col)
+        
+        # Validate that we found some PO numbers
+        po_count = po_numbers.notna().sum()
+        if po_count == 0:
+            print("WARNING: No PO numbers found in description column!")
+            print(f"Sample descriptions: {description_col.head().tolist()}")
+        else:
+            print(f"Found {po_count} PO numbers in descriptions")
+        
+        return po_numbers
     
     def find_parent_transaction_row(self, current_row, transactions_df):
         """Find the parent transaction row for a description row."""
@@ -269,10 +286,28 @@ class ExcelTransactionMatcher:
         
         # Use the new matching logic class
         matches = self.matching_logic.find_potential_matches(
-            transactions1, transactions2, lc_numbers1, lc_numbers2
+            transactions1, transactions2, lc_numbers1, lc_numbers2, start_counter=0
         )
         
         return matches
+    
+    def find_po_matches(self, start_counter=0):
+        """Find potential PO number matches between the two files."""
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2 = self.process_files()
+        
+        # Extract PO numbers from description column (column 2) - SAME AS LC MATCHING
+        description_col1 = transactions1.iloc[:, 2]
+        description_col2 = transactions2.iloc[:, 2]
+        
+        po_numbers1 = self.extract_po_numbers_with_validation(description_col1, transactions1)
+        po_numbers2 = self.extract_po_numbers_with_validation(description_col2, transactions2)
+        
+        # Use the PO matching logic class
+        po_matches = self.po_matching_logic.find_potential_matches(
+            transactions1, transactions2, po_numbers1, po_numbers2, start_counter=start_counter
+        )
+        
+        return po_matches
     
     def find_transaction_block_header(self, current_row, transactions_df):
         """Find the transaction block header row (with date and particulars) for a given row."""
@@ -302,13 +337,31 @@ class ExcelTransactionMatcher:
         lender_amount = match['File1_Amount'] if match['File1_Type'] == 'Lender' else match['File2_Amount']
         borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
         
+        # Determine match type and reference number
+        if 'LC_Number' in match:
+            match_type = "LC"
+            reference_number = match['LC_Number']
+        elif 'PO_Number' in match:
+            match_type = "PO"
+            reference_number = match['PO_Number']
+        else:
+            match_type = "UNKNOWN"
+            reference_number = "UNKNOWN"
+        
         audit_info = {
-            "match_type": "LC",
+            "match_type": match_type,
             "match_method": "reference_match",
-            "lc_number": match['LC_Number'],
+            "reference_number": reference_number,
             "lender_amount": f"{lender_amount:.2f}",
             "borrower_amount": f"{borrower_amount:.2f}"
         }
+        
+        # Add specific fields for backward compatibility
+        if match_type == "LC":
+            audit_info["lc_number"] = reference_number
+        elif match_type == "PO":
+            audit_info["po_number"] = reference_number
+        
         return json.dumps(audit_info)
     
     def _preserve_tally_date_format(self, transactions_df: pd.DataFrame):
@@ -444,7 +497,15 @@ class ExcelTransactionMatcher:
             audit_info = self.create_audit_info(match)
             
             print(f"Match {match_id}:")
-            print(f"  LC Number: {match['LC_Number']}")
+            
+            # Handle both LC and PO matches
+            if 'LC_Number' in match:
+                print(f"  LC Number: {match['LC_Number']}")
+            elif 'PO_Number' in match:
+                print(f"  PO Number: {match['PO_Number']}")
+            else:
+                print(f"  Reference: {match.get('reference_number', 'UNKNOWN')}")
+                
             print(f"  File1 Row {match['File1_Index']}: Debit={match['File1_Debit']}, Credit={match['File1_Credit']}")
             print(f"  File2 Row {match['File2_Index']}: Debit={match['File2_Debit']}, Credit={match['File2_Credit']}")
             print(f"  Audit Info: {audit_info}")
@@ -725,15 +786,26 @@ def main():
     
     # Create matcher instance
     matcher = ExcelTransactionMatcher(INPUT_FILE1_PATH, INPUT_FILE2_PATH)
-    matches = matcher.find_potential_matches()
+    
+    # Find LC matches first (start from 0)
+    lc_matches = matcher.find_potential_matches()
+    
+    # Find PO matches (start from where LC matches ended)
+    po_matches = matcher.find_po_matches(start_counter=len(lc_matches))
+    
     transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2 = matcher.process_files()
     
     print(f"\n=== SUMMARY ===")
-    print(f"Total potential matches found: {len(matches)}")
+    print(f"Found {len(lc_matches)} LC matches")
+    print(f"Found {len(po_matches)} PO matches")
+    print(f"Total potential matches found: {len(lc_matches) + len(po_matches)}")
     
-    if matches:
+    # Combine all matches
+    all_matches = lc_matches + po_matches
+    
+    if all_matches:
         print("\nCreating matched output files...")
-        matcher.create_matched_files(matches, transactions1, transactions2)
+        matcher.create_matched_files(all_matches, transactions1, transactions2)
         print("\nOutput files created successfully!")
     else:
         print("\nNo matches found. No output files created.")
