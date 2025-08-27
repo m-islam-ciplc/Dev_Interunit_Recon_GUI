@@ -442,6 +442,28 @@ class ExcelTransactionMatcher:
                 print(f"DEBUG: Date column index: 2, column name: {transactions_df.columns[2]}")
                 print(f"DEBUG: Date types after conversion: {[type(x) for x in transactions_df.iloc[:3, 2]]}")
 
+    def _format_amount_columns(self, worksheet):
+        """Format amount columns (Debit and Credit) to prevent scientific notation."""
+        # Debit column (J) and Credit column (K) - after adding Match ID and Audit Info
+        debit_col = 9  # Column J (0-indexed)
+        credit_col = 10  # Column K (0-indexed)
+        
+        # Format all data rows (starting from row 9)
+        for row in range(9, worksheet.max_row + 1):
+            try:
+                # Format Debit column
+                debit_cell = worksheet.cell(row=row, column=debit_col + 1)  # openpyxl uses 1-indexed
+                if debit_cell.value is not None and debit_cell.value != '':
+                    debit_cell.number_format = '#,##0.00'
+                
+                # Format Credit column
+                credit_cell = worksheet.cell(row=row, column=credit_col + 1)  # openpyxl uses 1-indexed
+                if credit_cell.value is not None and credit_cell.value != '':
+                    credit_cell.number_format = '#,##0.00'
+                    
+            except Exception as e:
+                print(f"Error formatting amount columns for row {row}: {e}")
+
     def _set_column_widths(self, worksheet):
         """Set column widths for the worksheet"""
         worksheet.column_dimensions['A'].width = 9.00
@@ -453,8 +475,8 @@ class ExcelTransactionMatcher:
         worksheet.column_dimensions['G'].width = 5.00
         worksheet.column_dimensions['H'].width = 12.78
         worksheet.column_dimensions['I'].width = 9.00
-        worksheet.column_dimensions['J'].width = 9.00
-        worksheet.column_dimensions['K'].width = 11.22
+        worksheet.column_dimensions['J'].width = 12.78
+        worksheet.column_dimensions['K'].width = 14.22
 
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
@@ -597,6 +619,7 @@ class ExcelTransactionMatcher:
             # Get the worksheet to set column widths
             worksheet = writer.sheets['Sheet1']
             self._set_column_widths(worksheet)
+            self._format_amount_columns(worksheet) # Apply amount formatting
             
             # Enable text wrapping for columns B (Audit Info) and E (Description)
             # Note: wrap_text is a cell property, not column property
@@ -626,6 +649,7 @@ class ExcelTransactionMatcher:
             # Get the worksheet to set column widths
             worksheet = writer.sheets['Sheet1']
             self._set_column_widths(worksheet)
+            self._format_amount_columns(worksheet) # Apply amount formatting
             
             # Enable text wrapping for columns B (Audit Info) and E (Description)
             # Note: wrap_text is a cell property, not column property
