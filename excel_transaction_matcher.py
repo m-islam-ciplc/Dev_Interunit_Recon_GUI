@@ -7,6 +7,8 @@ import json
 import os
 import sys
 import argparse
+from openpyxl.styles import Alignment
+import openpyxl
 
 # =============================================================================
 # CONFIGURATION SECTION - MODIFY THESE PATHS AS NEEDED
@@ -577,8 +579,7 @@ class ExcelTransactionMatcher:
             
             # Get the worksheet to set column widths
             worksheet = writer.sheets['Sheet1']
-            # Set Particulars column width to 100 pixels (approximately 13.5 Excel units)
-            # After adding Match ID and Audit Info, Particulars is at column D (4th column)
+            # Set column widths for all columns
             worksheet.column_dimensions['A'].width = 9.00
             worksheet.column_dimensions['B'].width = 30.00
             worksheet.column_dimensions['C'].width = 12.00
@@ -591,6 +592,25 @@ class ExcelTransactionMatcher:
             worksheet.column_dimensions['J'].width = 9.00
             worksheet.column_dimensions['K'].width = 9.00
             worksheet.column_dimensions['L'].width = 25.00
+            
+            # Enable text wrapping for columns B (Audit Info) and E (Description)
+            # Note: wrap_text is a cell property, not column property
+            # We'll set it on ALL rows that contain data
+            for row in range(9, worksheet.max_row + 1):  # ALL rows from 9 to max
+                try:
+                    # Column B (Audit Info)
+                    cell_b = worksheet.cell(row=row, column=2)
+                    if cell_b.value:
+                        cell_b.alignment = Alignment(wrap_text=True, vertical='top')
+                    
+                    # Column E (Description)
+                    cell_e = worksheet.cell(row=row, column=5)
+                    if cell_e.value:
+                        cell_e.alignment = Alignment(wrap_text=True, vertical='top')
+                        
+                except Exception as e:
+                    print(f"Error setting text wrapping for row {row}: {e}")
+                    
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
             self.metadata2.to_excel(writer, sheet_name='Sheet1', index=False, header=False)
@@ -612,6 +632,24 @@ class ExcelTransactionMatcher:
             worksheet.column_dimensions['J'].width = 9.00
             worksheet.column_dimensions['K'].width = 9.00
             worksheet.column_dimensions['L'].width = 25.00
+            
+            # Enable text wrapping for columns B (Audit Info) and E (Description)
+            # Note: wrap_text is a cell property, not column property
+            # We'll set it on ALL rows that contain data
+            for row in range(9, worksheet.max_row + 1):  # ALL rows from 9 to max
+                try:
+                    # Column B (Audit Info)
+                    cell_b = worksheet.cell(row=row, column=2)
+                    if cell_b.value:
+                        cell_b.alignment = Alignment(wrap_text=True, vertical='top')
+                    
+                    # Column E (Description)
+                    cell_e = worksheet.cell(row=row, column=5)
+                    if cell_e.value:
+                        cell_e.alignment = Alignment(wrap_text=True, vertical='top')
+                        
+                except Exception as e:
+                    print(f"Error setting text wrapping for row {row}: {e}")
         
         # Also create a simple version without metadata to test (if enabled)
         if CREATE_SIMPLE_FILES:
@@ -642,6 +680,24 @@ class ExcelTransactionMatcher:
             print(f"File1 loaded successfully, shape: {df_check1.shape}")
             print(f"File1 - Rows with Match IDs: {df_check1.iloc[:, 0].notna().sum()}")
             print(f"File1 - Rows with Audit Info: {df_check1.iloc[:, 1].notna().sum()}")
+            
+            # Check if text wrapping was applied by reading the Excel file with openpyxl
+            print(f"\n=== VERIFYING TEXT WRAPPING IN FILE 1 ===")
+            wb1 = openpyxl.load_workbook(output_file1)
+            ws1 = wb1.active
+            print(f"Worksheet: {ws1.title}")
+            print(f"Max row: {ws1.max_row}, Max column: {ws1.max_column}")
+            
+            # Check a few cells in columns B and E for text wrapping
+            for row in range(9, min(15, ws1.max_row + 1)):
+                cell_b = ws1.cell(row=row, column=2)
+                cell_e = ws1.cell(row=row, column=5)
+                print(f"Row {row}:")
+                print(f"  Column B: value='{cell_b.value}', wrap_text={cell_b.alignment.wrap_text if cell_b.alignment else 'None'}")
+                print(f"  Column E: value='{cell_e.value}', wrap_text={cell_e.alignment.wrap_text if cell_e.alignment else 'None'}")
+            
+            wb1.close()
+            
         except Exception as e:
             print(f"Error reading File1: {e}")
         
@@ -650,6 +706,24 @@ class ExcelTransactionMatcher:
             print(f"File2 loaded successfully, shape: {df_check2.shape}")
             print(f"File2 - Rows with Match IDs: {df_check2.iloc[:, 0].notna().sum()}")
             print(f"File2 - Rows with Audit Info: {df_check2.iloc[:, 1].notna().sum()}")
+            
+            # Check if text wrapping was applied by reading the Excel file with openpyxl
+            print(f"\n=== VERIFYING TEXT WRAPPING IN FILE 2 ===")
+            wb2 = openpyxl.load_workbook(output_file2)
+            ws2 = wb2.active
+            print(f"Worksheet: {ws2.title}")
+            print(f"Max row: {ws2.max_row}, Max column: {ws2.max_column}")
+            
+            # Check a few cells in columns B and E for text wrapping
+            for row in range(9, min(15, ws2.max_row + 1)):
+                cell_b = ws2.cell(row=row, column=2)
+                cell_e = ws2.cell(row=row, column=5)
+                print(f"Row {row}:")
+                print(f"  Column B: value='{cell_b.value}', wrap_text={cell_b.alignment.wrap_text if cell_b.alignment else 'None'}")
+                print(f"  Column E: value='{cell_e.value}', wrap_text={cell_e.alignment.wrap_text if cell_e.alignment else 'None'}")
+            
+            wb2.close()
+            
         except Exception as e:
             print(f"Error reading File2: {e}")
         
