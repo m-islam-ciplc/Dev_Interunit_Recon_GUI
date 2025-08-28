@@ -419,11 +419,11 @@ class ExcelTransactionMatcher:
         block_rows.append(block_header_row)  # Add the header row
         
         # Look forward to find where this block ends
-        # Block ends when we find "Entered By :" in the Particulars column
+        # Block ends when we find "Entered By :" in the Particulars column (Column B)
         while current_row < ws.max_row:
             current_row += 1
             
-            # Check if this row contains "Entered By :" in the Particulars column
+            # Check if this row contains "Entered By :" in the Particulars column (Column B)
             particulars_cell = ws.cell(row=current_row, column=2)
             if particulars_cell.value and str(particulars_cell.value).strip() == 'Entered By :':
                 # Found "Entered By :", so this row belongs to the current block
@@ -432,6 +432,19 @@ class ExcelTransactionMatcher:
                 if df_row_index >= 0:  # Ensure we don't go below 0
                     block_rows.append(df_row_index)
                 # This is the end of the block
+                break
+            
+            # Check if this row starts a NEW transaction block (Date + Dr/Cr)
+            date_cell = ws.cell(row=current_row, column=1)  # Column A (Date)
+            particulars_cell = ws.cell(row=current_row, column=2)  # Column B (Particulars)
+            
+            has_date = date_cell.value and str(date_cell.value).strip()
+            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
+            
+            # If we find a new transaction block start, stop here
+            if has_date and has_dr_cr:
+                # This row starts a new transaction block, so don't include it
+                # The current block ends at the previous row
                 break
             
             # This row belongs to the current block
@@ -445,6 +458,53 @@ class ExcelTransactionMatcher:
         print(f"DEBUG: Transaction block starting at row {block_header_row} spans {len(block_rows)} rows: {block_rows}")
         return block_rows
     
+    def find_narration_row_in_block(self, block_rows, file_path):
+        """
+        Find the first row of the narration block (where Date and DR/CR have values).
+        
+        Args:
+            block_rows: List of row indices that belong to the transaction block
+            file_path: Path to the Excel file to analyze
+        
+        Returns:
+            Row index of the first row of the narration block, or None if not found
+        """
+        # Load workbook with openpyxl to access formatting
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        
+        narration_block_start = None
+        
+        # Look for the first row of the narration block (where Date and DR/CR have values)
+        for block_row in block_rows:
+            # Convert DataFrame row index to Excel row number (add 9 because DataFrame starts at 0, Excel starts at 9)
+            excel_row = block_row + 9
+            
+            if excel_row <= ws.max_row:
+                date_cell = ws.cell(row=excel_row, column=3)  # Column C (Date)
+                debit_cell = ws.cell(row=excel_row, column=5)  # Column E (Debit)
+                credit_cell = ws.cell(row=excel_row, column=6)  # Column F (Credit)
+                
+                # Check if this row has Date and DR/CR values (start of narration block)
+                has_date = date_cell.value and str(date_cell.value).strip()
+                has_debit = debit_cell.value and str(debit_cell.value).strip() and str(debit_cell.value) != 'nan'
+                has_credit = credit_cell.value and str(credit_cell.value).strip() and str(credit_cell.value) != 'nan'
+                
+                # This is the start of narration block if it has Date and either Debit or Credit
+                if has_date and (has_debit or has_credit):
+                    narration_block_start = block_row
+                    print(f"DEBUG: Found narration block start at Excel row {excel_row} with Date='{date_cell.value}', Debit='{debit_cell.value}', Credit='{credit_cell.value}'")
+                    break
+        
+        wb.close()
+        
+        if narration_block_start is not None:
+            print(f"DEBUG: Found narration block start at index {narration_block_start}")
+        else:
+            print(f"DEBUG: No narration block start found in transaction block")
+        
+        return narration_block_start
+
     def create_audit_info(self, match):
         """Create audit info in clean, readable plaintext format."""
         # Use the validated amounts from the matching process
@@ -602,23 +662,18 @@ class ExcelTransactionMatcher:
             file1_block_rows = self.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            for i, block_row in enumerate(file1_block_rows):
+            # Populate ALL rows of the transaction block with Match ID and Audit Info
+            for block_row in file1_block_rows:
                 if 0 <= block_row < len(file1_matched):
                     file1_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    # Audit Info only on the first row (header row) of the transaction block
-                    if i == 0:
-                        file1_matched.iloc[block_row, 1] = audit_info
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Audit Info")
-                    else:
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' (no Audit Info)")
+                    file1_matched.iloc[block_row, 1] = audit_info  # Audit Info on all rows
+                    print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Audit Info")
             
             # Also try the alternative DataFrame
-            for i, block_row in enumerate(file1_block_rows):
+            for block_row in file1_block_rows:
                 if 0 <= block_row < len(file1_matched_alt):
                     file1_matched_alt.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    # Audit Info only on the first row (header row) of the transaction block
-                    if i == 0:
-                        file1_matched_alt.iloc[block_row, 1] = audit_info
+                    file1_matched_alt.iloc[block_row, 1] = audit_info  # Audit Info on all rows
             
             # Update file2 - populate entire transaction block with Match ID and Audit Info
             file2_row_idx = match['File2_Index']
@@ -629,15 +684,12 @@ class ExcelTransactionMatcher:
             file2_block_rows = self.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            for i, block_row in enumerate(file2_block_rows):
+            # Populate ALL rows of the transaction block with Match ID and Audit Info
+            for block_row in file2_block_rows:
                 if 0 <= block_row < len(file2_matched):
                     file2_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    # Audit Info only on the first row (header row) of the transaction block
-                    if i == 0:
-                        file2_matched.iloc[block_row, 1] = audit_info
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Audit Info")
-                    else:
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' (no Audit Info)")
+                    file2_matched.iloc[block_row, 1] = audit_info  # Audit Info on all rows
+                    print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Audit Info")
         
         # Save matched files using configuration variables
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]
@@ -814,6 +866,8 @@ class ExcelTransactionMatcher:
         
         # Verify the data was populated correctly
         self.verify_match_data(file1_matched, file2_matched, matches)
+    
+
     
     def verify_match_data(self, file1_matched, file2_matched, matches):
         """Verify that Match ID and Audit Info columns are properly populated."""
