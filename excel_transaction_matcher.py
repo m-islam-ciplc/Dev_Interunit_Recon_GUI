@@ -3,7 +3,6 @@ import numpy as np
 import re
 from typing import List, Dict, Any, Tuple
 import logging
-import json
 import os
 import sys
 import argparse
@@ -395,20 +394,66 @@ class ExcelTransactionMatcher:
         
         return None
     
+    def get_transaction_block_rows(self, block_header_row, file_path):
+        """
+        Get all row indices that belong to a specific transaction block.
+        
+        Args:
+            block_header_row: The row index of the transaction block header
+            file_path: Path to the Excel file to analyze
+        
+        Returns:
+            List of row indices that belong to the transaction block
+        """
+        block_rows = []
+        
+        # Load workbook with openpyxl to access formatting
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        
+        # Convert DataFrame row index to Excel row number (add 9 because DataFrame starts at 0, Excel starts at 9)
+        excel_start_row = block_header_row + 9
+        
+        # Start from the block header row
+        current_row = excel_start_row
+        block_rows.append(block_header_row)  # Add the header row
+        
+        # Look forward to find where this block ends
+        # Block ends when we find "Entered By :" in the Particulars column
+        while current_row < ws.max_row:
+            current_row += 1
+            
+            # Check if this row contains "Entered By :" in the Particulars column
+            particulars_cell = ws.cell(row=current_row, column=2)
+            if particulars_cell.value and str(particulars_cell.value).strip() == 'Entered By :':
+                # Found "Entered By :", so this row belongs to the current block
+                # Convert Excel row number back to DataFrame row index
+                df_row_index = current_row - 9
+                if df_row_index >= 0:  # Ensure we don't go below 0
+                    block_rows.append(df_row_index)
+                # This is the end of the block
+                break
+            
+            # This row belongs to the current block
+            # Convert Excel row number back to DataFrame row index
+            df_row_index = current_row - 9
+            if df_row_index >= 0:  # Ensure we don't go below 0
+                block_rows.append(df_row_index)
+        
+        wb.close()
+        
+        print(f"DEBUG: Transaction block starting at row {block_header_row} spans {len(block_rows)} rows: {block_rows}")
+        return block_rows
+    
     def create_audit_info(self, match):
-        """Create audit info JSON string for a match."""
+        """Create audit info in clean, readable plaintext format."""
         # Use the validated amounts from the matching process
         lender_amount = match['File1_Amount'] if match['File1_Type'] == 'Lender' else match['File2_Amount']
         borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
         
-        audit_info = {
-            "match_type": "LC",
-            "match_method": "reference_match",
-            "lc_number": match['LC_Number'],
-            "lender_amount": f"{lender_amount:.2f}",
-            "borrower_amount": f"{borrower_amount:.2f}"
-        }
-        return json.dumps(audit_info)
+        # Create clean, readable plaintext format
+        audit_info = f"Match Type: LC Match\n{match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        return audit_info
     
     def _preserve_tally_date_format(self, transactions_df: pd.DataFrame):
         """Ensure dates are in Tally format (e.g., '01/Jul/2024') before saving."""
@@ -548,41 +593,41 @@ class ExcelTransactionMatcher:
             print(f"  File2 Row {match['File2_Index']}: Debit={match['File2_Debit']}, Credit={match['File2_Credit']}")
             print(f"  Audit Info: {audit_info}")
             
-            # Update file1 - convert from block header row to actual DataFrame row
+            # Update file1 - populate entire transaction block with Match ID and Audit Info
             file1_row_idx = match['File1_Index']
             print(f"    DEBUG: Setting File1 row {file1_row_idx} col 0 to '{match_id}'")
             print(f"    DEBUG: Setting File1 row {file1_row_idx} col 1 to '{audit_info[:50]}...'")
             
-            # Check what's currently in the DataFrame at this position
-            print(f"    DEBUG: Before setting - File1 row {file1_row_idx} col 0 = '{file1_matched.iloc[file1_row_idx, 0]}'")
-            print(f"    DEBUG: Before setting - File1 row {file1_row_idx} col 1 = '{file1_matched.iloc[file1_row_idx, 1]}'")
+            # Find the entire transaction block for file1 and populate all rows
+            file1_block_rows = self.get_transaction_block_rows(file1_row_idx, self.file1_path)
+            print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            file1_matched.iloc[file1_row_idx, 0] = match_id  # Match ID column
-            file1_matched.iloc[file1_row_idx, 1] = audit_info  # Audit Info column
+            for block_row in file1_block_rows:
+                if 0 <= block_row < len(file1_matched):
+                    file1_matched.iloc[block_row, 0] = match_id  # Match ID column
+                    file1_matched.iloc[block_row, 1] = audit_info  # Audit Info column
+                    print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}'")
             
             # Also try the alternative DataFrame
-            file1_matched_alt.iloc[file1_row_idx, 0] = match_id  # Match ID column
-            file1_matched_alt.iloc[file1_row_idx, 1] = audit_info  # Audit Info column
+            for block_row in file1_block_rows:
+                if 0 <= block_row < len(file1_matched_alt):
+                    file1_matched_alt.iloc[block_row, 0] = match_id  # Match ID column
+                    file1_matched_alt.iloc[block_row, 1] = audit_info  # Audit Info column
             
-            # Verify the data was set
-            print(f"    DEBUG: After setting - File1 row {file1_row_idx} col 0 = '{file1_matched.iloc[file1_row_idx, 0]}'")
-            print(f"    DEBUG: After setting - File1 row {file1_row_idx} col 1 = '{file1_matched.iloc[file1_row_idx, 1]}'")
-            
-            # Update file2 - convert from block header row to actual DataFrame row
+            # Update file2 - populate entire transaction block with Match ID and Audit Info
             file2_row_idx = match['File2_Index']
             print(f"    DEBUG: Setting File2 row {file2_row_idx} col 0 to '{match_id}'")
             print(f"    DEBUG: Setting File2 row {file2_row_idx} col 1 to '{audit_info[:50]}...'")
             
-            # Check what's currently in the DataFrame at this position
-            print(f"    DEBUG: Before setting - File2 row {file2_row_idx} col 0 = '{file2_matched.iloc[file2_row_idx, 0]}'")
-            print(f"    DEBUG: Before setting - File2 row {file2_row_idx} col 1 = '{file2_matched.iloc[file2_row_idx, 1]}'")
+            # Find the entire transaction block for file2 and populate all rows
+            file2_block_rows = self.get_transaction_block_rows(file2_row_idx, self.file2_path)
+            print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            file2_matched.iloc[file2_row_idx, 0] = match_id  # Match ID column
-            file2_matched.iloc[file2_row_idx, 1] = audit_info  # Audit Info column
-            
-            # Verify the data was set
-            print(f"    DEBUG: After setting - File2 row {file2_row_idx} col 0 = '{file2_matched.iloc[file2_row_idx, 0]}'")
-            print(f"    DEBUG: After setting - File2 row {file2_row_idx} col 1 = '{file2_matched.iloc[file2_row_idx, 1]}'")
+            for block_row in file2_block_rows:
+                if 0 <= block_row < len(file2_matched):
+                    file2_matched.iloc[block_row, 0] = match_id  # Match ID column
+                    file2_matched.iloc[block_row, 1] = audit_info  # Audit Info column
+                    print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}'")
         
         # Save matched files using configuration variables
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]
