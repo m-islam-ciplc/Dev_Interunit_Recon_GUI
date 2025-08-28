@@ -394,16 +394,16 @@ class ExcelTransactionMatcher:
         
         return None
     
-    def get_transaction_block_rows(self, block_header_row, file_path):
+    def get_transaction_block_rows(self, lc_match_row, file_path):
         """
-        Get all row indices that belong to a specific transaction block.
+        Get all row indices that belong to the transaction block containing the LC match.
         
         Args:
-            block_header_row: The row index of the transaction block header
+            lc_match_row: The row index where the LC match was found
             file_path: Path to the Excel file to analyze
         
         Returns:
-            List of row indices that belong to the transaction block
+            List of row indices that belong to the transaction block (from start to "Entered By :")
         """
         block_rows = []
         
@@ -411,51 +411,70 @@ class ExcelTransactionMatcher:
         wb = openpyxl.load_workbook(file_path)
         ws = wb.active
         
-        # Convert DataFrame row index to Excel row number (add 9 because DataFrame starts at 0, Excel starts at 9)
-        excel_start_row = block_header_row + 9
+        # Convert DataFrame row index to Excel row number 
+        # DataFrame starts at 0, but Excel has metadata rows 1-8, then headers at row 9, then data starts at row 10
+        # So DataFrame row 0 = Excel row 10, DataFrame row 1 = Excel row 11, etc.
+        excel_lc_row = lc_match_row + 10
         
-        # Start from the block header row
-        current_row = excel_start_row
-        block_rows.append(block_header_row)  # Add the header row
+        # FIRST: Look BACKWARDS from the LC match row to find the ACTUAL start of the transaction block
+        # Transaction block starts where we find Date + Dr/Cr
+        block_start_row = excel_lc_row
+        for row_idx in range(excel_lc_row, 8, -1):  # Go backwards from LC row to row 9
+            date_cell = ws.cell(row=row_idx, column=1)  # Column A (Date)
+            particulars_cell = ws.cell(row=row_idx, column=2)  # Column B (Particulars)
+            
+            # Check if this row has a real date and Dr/Cr (transaction block start)
+            has_real_date = (date_cell.value and 
+                           str(date_cell.value).strip() and 
+                           str(date_cell.value).strip() != 'None' and
+                           str(date_cell.value).strip() != '')
+            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
+            
+            if has_real_date and has_dr_cr:
+                # Found the start of the transaction block
+                block_start_row = row_idx
+                break
         
-        # Look forward to find where this block ends
-        # Block ends when we find "Entered By :" in the Particulars column (Column B)
-        while current_row < ws.max_row:
-            current_row += 1
+        # Convert back to DataFrame row index
+        df_block_start = block_start_row - 10
+        
+        # SECOND: Look FORWARDS from the block start to find where it ends ("Entered By :")
+        current_row = block_start_row
+        while current_row <= ws.max_row:
+            # Convert Excel row number to DataFrame row index
+            df_row_index = current_row - 10
+            if df_row_index >= 0:
+                block_rows.append(df_row_index)
             
             # Check if this row contains "Entered By :" in the Particulars column (Column B)
             particulars_cell = ws.cell(row=current_row, column=2)
             if particulars_cell.value and str(particulars_cell.value).strip() == 'Entered By :':
-                # Found "Entered By :", so this row belongs to the current block
-                # Convert Excel row number back to DataFrame row index
-                df_row_index = current_row - 9
-                if df_row_index >= 0:  # Ensure we don't go below 0
-                    block_rows.append(df_row_index)
-                # This is the end of the block
+                # Found "Entered By :", this is the end of the block
                 break
             
             # Check if this row starts a NEW transaction block (Date + Dr/Cr)
             date_cell = ws.cell(row=current_row, column=1)  # Column A (Date)
             particulars_cell = ws.cell(row=current_row, column=2)  # Column B (Particulars)
             
-            has_date = date_cell.value and str(date_cell.value).strip()
+            # Only treat as new block if it has a REAL date (not 'None' or empty) AND Dr/Cr
+            has_real_date = (date_cell.value and 
+                           str(date_cell.value).strip() and 
+                           str(date_cell.value).strip() != 'None' and
+                           str(date_cell.value).strip() != '')
             has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
             
             # If we find a new transaction block start, stop here
-            if has_date and has_dr_cr:
+            if has_real_date and has_dr_cr and current_row > block_start_row:
                 # This row starts a new transaction block, so don't include it
                 # The current block ends at the previous row
                 break
             
-            # This row belongs to the current block
-            # Convert Excel row number back to DataFrame row index
-            df_row_index = current_row - 9
-            if df_row_index >= 0:  # Ensure we don't go below 0
-                block_rows.append(df_row_index)
+            current_row += 1
         
         wb.close()
         
-        print(f"DEBUG: Transaction block starting at row {block_header_row} spans {len(block_rows)} rows: {block_rows}")
+        print(f"DEBUG: Transaction block for LC match at row {lc_match_row} spans {len(block_rows)} rows: {block_rows}")
+        print(f"DEBUG: Block starts at row {df_block_start} and includes rows up to 'Entered By :'")
         return block_rows
     
     def find_narration_row_in_block(self, block_rows, file_path):
@@ -512,7 +531,7 @@ class ExcelTransactionMatcher:
         borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
         
         # Create clean, readable plaintext format
-        audit_info = f"Match Type: LC Match\n{match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
         return audit_info
     
     def _preserve_tally_date_format(self, transactions_df: pd.DataFrame):
