@@ -18,97 +18,135 @@ class LCMatchingLogic:
         print(f"\nFile 1: {len(lc_transactions1)} transactions with LC numbers")
         print(f"File 2: {len(lc_transactions2)} transactions with LC numbers")
         
-        # Find matches
+        # Find matches - NEW LOGIC: Amount → Entered By → LC Number
         matches = []
         match_counter = 0
         
+        print(f"\n=== NEW MATCHING LOGIC ===")
+        print(f"1. Check if lender debit and borrower credit amounts are EXACTLY the same")
+        print(f"2. Check if 'Entered By' names are the same")
+        print(f"3. Check if LC numbers match between them")
+        print(f"4. Only if all three match: Assign same Match ID")
+        
+        # Process each transaction in File 1 to find matches in File 2
         for idx1, lc1 in enumerate(lc_numbers1):
             if not lc1:
                 continue
+                
+            print(f"\n--- Processing File 1 Row {idx1} with LC: {lc1} ---")
+            
+            # Find the transaction block header row for this LC in File 1
+            block_header1 = self.find_transaction_block_header(idx1, transactions1)
+            header_row1 = transactions1.iloc[block_header1]
+            
+            # Extract amounts and determine transaction type for File 1
+            file1_debit = header_row1.iloc[7] if pd.notna(header_row1.iloc[7]) else 0
+            file1_credit = header_row1.iloc[8] if pd.notna(header_row1.iloc[8]) else 0
+            
+            file1_is_lender = file1_debit > 0
+            file1_is_borrower = file1_credit > 0
+            file1_amount = file1_debit if file1_is_lender else file1_credit
+            
+            print(f"  File 1: Amount={file1_amount}, Type={'Lender' if file1_is_lender else 'Borrower'}")
+            
+            # Find "Entered By" name for this transaction block in File 1
+            file1_entered_by = self.find_entered_by_name(block_header1, transactions1)
+            print(f"  File 1: Entered By = '{file1_entered_by}'")
+            
+            # Now look for matches in File 2
             for idx2, lc2 in enumerate(lc_numbers2):
                 if not lc2:
                     continue
-                if lc1 == lc2:
-                    # Find the transaction block header row for each LC
-                    # This is the row with date and particulars (Dr/Cr)
-                    block_header1 = self.find_transaction_block_header(idx1, transactions1)
-                    block_header2 = self.find_transaction_block_header(idx2, transactions2)
                     
-                    # Get the transaction block header rows
-                    header_row1 = transactions1.iloc[block_header1]
-                    header_row2 = transactions2.iloc[block_header2]
-                    
-                    # Extract amounts from both files
-                    file1_debit = header_row1.iloc[7] if pd.notna(header_row1.iloc[7]) else 0
-                    file1_credit = header_row1.iloc[8] if pd.notna(header_row1.iloc[8]) else 0
-                    file2_debit = header_row2.iloc[7] if pd.notna(header_row2.iloc[7]) else 0
-                    file2_credit = header_row2.iloc[8] if pd.notna(header_row2.iloc[8]) else 0
-                    
-                    # Determine transaction types and amounts
-                    # Lender: Has Debit amount (Dr), Borrower: Has Credit amount (Cr)
-                    file1_is_lender = file1_debit > 0
-                    file1_is_borrower = file1_credit > 0
-                    file2_is_lender = file2_debit > 0
-                    file2_is_borrower = file2_credit > 0
-                    
-                    # Get the actual amounts
-                    file1_amount = file1_debit if file1_is_lender else file1_credit
-                    file2_amount = file2_debit if file2_is_lender else file2_credit
-                    
-                    # CRITICAL: Only create a match if:
-                    # 1. One file is lender (Dr) and other is borrower (Cr)
-                    # 2. The amounts are the same (within tolerance)
-                    if ((file1_is_lender and file2_is_borrower) or (file1_is_borrower and file2_is_lender)):
-                        # Check if amounts match (within configured tolerance for rounding)
-                        if abs(file1_amount - file2_amount) < self.amount_tolerance:
-                            match_counter += 1
-                            
-                            # Debug: Print the actual row data to see what we're working with   
-                            print(f"\nDEBUG: LC {lc1} VALID match found (amounts match):")
-                            print(f"  File1 Description Row {idx1} → Block Header Row {block_header1}: Date={header_row1.iloc[0]}, Particulars={header_row1.iloc[1]}")
-                            print(f"  File2 Description Row {idx2} → Block Header Row {block_header2}: Date={header_row2.iloc[0]}, Particulars={header_row2.iloc[1]}")
-                            print(f"  Amounts: File1={file1_amount} ({'Lender' if file1_is_lender else 'Borrower'}), File2={file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
-                            
-                            matches.append({
-                                'match_id': f"M{match_counter:03d}",  # Unique match ID
-                                'File1_Index': block_header1,  # This is the transaction block header row
-                                'File2_Index': block_header2,  # This is the transaction block header row
-                                'LC_Number': lc1,
-                                'File1_Date': header_row1.iloc[0],  # First column (Date)
-                                'File1_Description': header_row1.iloc[2],  # Third column (Description)
-                                'File1_Debit': header_row1.iloc[7],  # Eighth column (Debit)
-                                'File1_Credit': header_row1.iloc[8],  # Ninth column (Credit)
-                                'File2_Date': header_row2.iloc[0],  # First column (Date)
-                                'File2_Description': header_row2.iloc[2],  # Third column (Description)
-                                'File2_Debit': header_row2.iloc[7],  # Eighth column (Debit)
-                                'File2_Credit': header_row2.iloc[8],  # Ninth column (Credit)
-                                'File1_Amount': file1_amount,
-                                'File2_Amount': file2_amount,
-                                'File1_Type': 'Lender' if file1_is_lender else 'Borrower',
-                                'File2_Type': 'Lender' if file2_is_lender else 'Borrower'
-                            })
-                        else:
-                            print(f"\nDEBUG: LC {lc1} REJECTED - amounts don't match:")
-                            print(f"  File1: {file1_amount} ({'Lender' if file1_is_lender else 'Borrower'})")
-                            print(f"  File2: {file2_amount} ({'Lender' if file2_is_lender else 'Borrower'})")
-                            print(f"  Difference: {abs(file1_amount - file2_amount)}")
-                    else:
-                        print(f"\nDEBUG: LC {lc1} REJECTED - transaction types don't match:")
-                        print(f"  File1: {'Lender' if file1_is_lender else 'Borrower' if file1_is_borrower else 'Neither'}")
-                        print(f"  File2: {'Lender' if file2_is_lender else 'Borrower' if file2_is_borrower else 'Neither'}")
+                print(f"    Checking File 2 Row {idx2} with LC: {lc2}")
+                
+                # Find the transaction block header row for this LC in File 2
+                block_header2 = self.find_transaction_block_header(idx2, transactions2)
+                header_row2 = transactions2.iloc[block_header2]
+                
+                # Extract amounts and determine transaction type for File 2
+                file2_debit = header_row2.iloc[7] if pd.notna(header_row2.iloc[7]) else 0
+                file2_credit = header_row2.iloc[8] if pd.notna(header_row2.iloc[8]) else 0
+                
+                file2_is_lender = file2_debit > 0
+                file2_is_borrower = file2_credit > 0
+                file2_amount = file2_debit if file2_is_lender else file2_credit
+                
+                print(f"      File 2: Amount={file2_amount}, Type={'Lender' if file2_is_lender else 'Borrower'}")
+                
+                # STEP 1: Check if amounts are EXACTLY the same
+                if file1_amount != file2_amount:
+                    print(f"      ❌ REJECTED: Amounts don't match ({file1_amount} vs {file2_amount})")
+                    continue
+                
+                print(f"      ✅ STEP 1 PASSED: Amounts match exactly")
+                
+                # STEP 2: Check if transaction types are opposite (one lender, one borrower)
+                if not ((file1_is_lender and file2_is_borrower) or (file1_is_borrower and file2_is_lender)):
+                    print(f"      ❌ REJECTED: Transaction types don't match (both same type)")
+                    continue
+                
+                print(f"      ✅ STEP 2 PASSED: Transaction types are opposite")
+                
+                # Find "Entered By" name for this transaction block in File 2
+                file2_entered_by = self.find_entered_by_name(block_header2, transactions2)
+                print(f"      File 2: Entered By = '{file2_entered_by}'")
+                
+                # STEP 3: Check if "Entered By" names are the same
+                if file1_entered_by != file2_entered_by:
+                    print(f"      ❌ REJECTED: Entered By names don't match ('{file1_entered_by}' vs '{file2_entered_by}')")
+                    continue
+                
+                print(f"      ✅ STEP 3 PASSED: Entered By names match")
+                
+                # STEP 4: Check if LC numbers match
+                if lc1 != lc2:
+                    print(f"      ❌ REJECTED: LC numbers don't match ('{lc1}' vs '{lc2}')")
+                    continue
+                
+                print(f"      ✅ STEP 4 PASSED: LC numbers match")
+                print(f"      🎉 ALL CRITERIA MET - MATCH FOUND!")
+                
+                # All three criteria met! Create the match
+                match_counter += 1
+                match_id = f"M{match_counter:03d}"
+                
+                matches.append({
+                    'match_id': match_id,
+                    'File1_Index': block_header1,
+                    'File2_Index': block_header2,
+                    'LC_Number': lc1,
+                    'File1_Date': header_row1.iloc[0],
+                    'File1_Description': header_row1.iloc[2],
+                    'File1_Debit': header_row1.iloc[7],
+                    'File1_Credit': header_row1.iloc[8],
+                    'File2_Date': header_row2.iloc[0],
+                    'File2_Description': header_row2.iloc[2],
+                    'File2_Debit': header_row2.iloc[7],
+                    'File2_Credit': header_row2.iloc[8],
+                    'File1_Amount': file1_amount,
+                    'File2_Amount': file2_amount,
+                    'File1_Type': 'Lender' if file1_is_lender else 'Borrower',
+                    'File2_Type': 'Lender' if file2_is_lender else 'Borrower',
+                    'Entered_By': file1_entered_by
+                })
         
-        print(f"\nFound {len(matches)} potential LC matches!")
+        print(f"\n=== MATCHING RESULTS ===")
+        print(f"Found {len(matches)} valid matches across {match_counter} unique Match IDs!")
         
         # Show some examples
         if matches:
             print("\n=== SAMPLE MATCHES ===")
-            for i, match in enumerate(matches[:5]):  # Show first 5 matches
+            for i, match in enumerate(matches[:5]):
                 print(f"\nMatch {i+1}:")
+                print(f"Match ID: {match['match_id']}")
                 print(f"LC Number: {match['LC_Number']}")
+                print(f"Amount: {match['File1_Amount']}")
+                print(f"Entered By: {match['Entered_By']}")
                 print(f"File 1: {match['File1_Date']} - {str(match['File1_Description'])[:50]}...")
-                print(f"  Debit: {match['File1_Debit']}, Credit: {match['File1_Credit']}")
+                print(f"  Type: {match['File1_Type']}, Debit: {match['File1_Debit']}, Credit: {match['File1_Credit']}")
                 print(f"File 2: {match['File2_Date']} - {str(match['File2_Description'])[:50]}...")
-                print(f"  Debit: {match['File2_Debit']}, Credit: {match['File2_Credit']}")
+                print(f"  Type: {match['File2_Type']}, Debit: {match['File2_Debit']}, Credit: {match['File2_Credit']}")
         
         return matches
     
@@ -133,6 +171,23 @@ class LCMatchingLogic:
         
         # If no header found, return the description row itself
         return description_row_idx
+    
+    def find_entered_by_name(self, block_header_idx, transactions_df):
+        """Find the 'Entered By' name for a transaction block."""
+        # Look forward from the block header to find "Entered By :" row
+        for row_idx in range(block_header_idx, len(transactions_df)):
+            row = transactions_df.iloc[row_idx]
+            particulars = row.iloc[1]  # Column B (Particulars)
+            
+            if pd.notna(particulars) and str(particulars).strip() == 'Entered By :':
+                # Found "Entered By :", get the name from the next column
+                if row_idx + 1 < len(transactions_df):
+                    name_row = transactions_df.iloc[row_idx + 1]
+                    name = name_row.iloc[2]  # Column C (Description)
+                    return str(name).strip() if pd.notna(name) else "Unknown"
+                break
+        
+        return "Unknown"
     
     def set_amount_tolerance(self, tolerance):
         """Set the amount tolerance for matching."""

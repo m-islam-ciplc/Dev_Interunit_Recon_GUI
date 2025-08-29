@@ -42,3 +42,4 @@ for row_num in range(25, 35):
         print(f"  *** LOOKS LIKE TRANSACTION START at Excel row {row_num} ***")
 
 wb.close()
+

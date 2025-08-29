@@ -622,23 +622,7 @@ class ExcelTransactionMatcher:
         file1_matched.insert(0, 'Match ID', None)
         file1_matched.insert(1, 'Audit Info', None)
         
-        # Alternative approach: create a new DataFrame with the new columns
-        print(f"DEBUG: Trying alternative DataFrame creation...")
-        new_columns = ['Match ID', 'Audit Info'] + list(transactions1.columns)
-        file1_matched_alt = pd.DataFrame(index=transactions1.index, columns=new_columns)
-        
-        # Copy the original data
-        for col in transactions1.columns:
-            file1_matched_alt[col] = transactions1[col]
-        
-        # Initialize new columns
-        file1_matched_alt['Match ID'] = None
-        file1_matched_alt['Audit Info'] = None
-        
-        print(f"DEBUG: Alternative File1 DataFrame created with shape: {file1_matched_alt.shape}")
-        print(f"DEBUG: Alternative File1 columns: {list(file1_matched_alt.columns)}")
-        print(f"DEBUG: Alternative File1 first few rows of Match ID column:")
-        print(file1_matched_alt.iloc[:5, 0].tolist())
+
         
         print(f"DEBUG: File1 DataFrame created with shape: {file1_matched.shape}")
         print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
@@ -681,18 +665,19 @@ class ExcelTransactionMatcher:
             file1_block_rows = self.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID and Audit Info
-            for block_row in file1_block_rows:
+            # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row
+            for i, block_row in enumerate(file1_block_rows):
                 if 0 <= block_row < len(file1_matched):
                     file1_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    file1_matched.iloc[block_row, 1] = audit_info  # Audit Info on all rows
-                    print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Audit Info")
+                    
+                    # Audit Info goes ONLY in the second-to-last row of the transaction block
+                    if i == len(file1_block_rows) - 2:  # Second-to-last row
+                        file1_matched.iloc[block_row, 1] = audit_info
+                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Audit Info (second-to-last row)")
+                    else:
+                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' only")
             
-            # Also try the alternative DataFrame
-            for block_row in file1_block_rows:
-                if 0 <= block_row < len(file1_matched_alt):
-                    file1_matched_alt.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    file1_matched_alt.iloc[block_row, 1] = audit_info  # Audit Info on all rows
+
             
             # Update file2 - populate entire transaction block with Match ID and Audit Info
             file2_row_idx = match['File2_Index']
@@ -703,12 +688,17 @@ class ExcelTransactionMatcher:
             file2_block_rows = self.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID and Audit Info
-            for block_row in file2_block_rows:
+            # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row
+            for i, block_row in enumerate(file2_block_rows):
                 if 0 <= block_row < len(file2_matched):
                     file2_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
-                    file2_matched.iloc[block_row, 1] = audit_info  # Audit Info on all rows
-                    print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Audit Info")
+                    
+                    # Audit Info goes ONLY in the second-to-last row of the transaction block
+                    if i == len(file2_block_rows) - 2:  # Second-to-last row
+                        file2_matched.iloc[block_row, 1] = audit_info
+                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Audit Info (second-to-last row)")
+                    else:
+                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' only")
         
         # Save matched files using configuration variables
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]
@@ -816,12 +806,7 @@ class ExcelTransactionMatcher:
             print(f"  {simple_output1}")
             print(f"  {simple_output2}")
         
-        # Also try the alternative DataFrame (if enabled)
-        if CREATE_ALT_FILES:
-            alt_simple_output1 = os.path.join(OUTPUT_FOLDER, f"{base_name1}_ALT{SIMPLE_SUFFIX}")
-            print(f"Creating alternative simple test file...")
-            file1_matched_alt.to_excel(alt_simple_output1, index=False, header=True)
-            print(f"  {alt_simple_output1}")
+
         
         print(f"\n=== DEBUG: AFTER SAVING ===")
         print(f"Checking if files were actually written...")
