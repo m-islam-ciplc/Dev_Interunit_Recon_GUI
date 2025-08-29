@@ -9,6 +9,7 @@ import argparse
 from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
+from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
 # CONFIGURATION SECTION - MODIFY THESE PATHS AS NEEDED
@@ -83,6 +84,7 @@ class ExcelTransactionMatcher:
         self.metadata2 = None
         self.transactions2 = None
         self.matching_logic = LCMatchingLogic()
+        self.block_identifier = TransactionBlockIdentifier()
         
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
@@ -166,7 +168,7 @@ class ExcelTransactionMatcher:
         return pd.Series(lc_numbers)
     
     def extract_lc_numbers_from_narration(self, file_path):
-        """Extract LC numbers from narration rows (non-bold Column C) using openpyxl formatting."""
+        """Extract LC numbers from narration rows (regular text Column C - not bold, not italic) using openpyxl formatting."""
         lc_numbers = []
         lc_parent_rows = []
         
@@ -178,10 +180,11 @@ class ExcelTransactionMatcher:
             particulars_cell = ws.cell(row=row, column=2)
             desc_cell = ws.cell(row=row, column=3)
             
-            # Check if this is a narration row (non-bold Column C)
+            # Check if this is a narration row (italic text Column C - not bold, but italic)
             is_narration = (desc_cell.value and 
                            desc_cell.font and 
-                           not desc_cell.font.bold)
+                           not desc_cell.font.bold and 
+                           desc_cell.font.italic)
             
             if is_narration:
                 # This is a narration row, check for LC numbers
@@ -335,8 +338,8 @@ class ExcelTransactionMatcher:
         
         # Identify transaction blocks using formatting
         print("Identifying transaction blocks using formatting...")
-        blocks1 = self.identify_transaction_blocks_with_formatting(self.file1_path)
-        blocks2 = self.identify_transaction_blocks_with_formatting(self.file2_path)
+        blocks1 = self.block_identifier.identify_transaction_blocks(self.transactions1, self.file1_path)
+        blocks2 = self.block_identifier.identify_transaction_blocks(self.transactions2, self.file2_path)
         
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
@@ -394,136 +397,10 @@ class ExcelTransactionMatcher:
         
         return None
     
-    def get_transaction_block_rows(self, lc_match_row, file_path):
-        """
-        Get all row indices that belong to the transaction block containing the LC match.
-        
-        Args:
-            lc_match_row: The row index where the LC match was found
-            file_path: Path to the Excel file to analyze
-        
-        Returns:
-            List of row indices that belong to the transaction block (from start to "Entered By :")
-        """
-        block_rows = []
-        
-        # Load workbook with openpyxl to access formatting
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        
-        # Convert DataFrame row index to Excel row number 
-        # DataFrame starts at 0, but Excel has metadata rows 1-8, then headers at row 9, then data starts at row 10
-        # So DataFrame row 0 = Excel row 10, DataFrame row 1 = Excel row 11, etc.
-        excel_lc_row = lc_match_row + 10
-        
-        # FIRST: Look BACKWARDS from the LC match row to find the ACTUAL start of the transaction block
-        # Transaction block starts where we find Date + Dr/Cr
-        block_start_row = excel_lc_row
-        for row_idx in range(excel_lc_row, 8, -1):  # Go backwards from LC row to row 9
-            date_cell = ws.cell(row=row_idx, column=1)  # Column A (Date)
-            particulars_cell = ws.cell(row=row_idx, column=2)  # Column B (Particulars)
-            
-            # Check if this row has a real date and Dr/Cr (transaction block start)
-            has_real_date = (date_cell.value and 
-                           str(date_cell.value).strip() and 
-                           str(date_cell.value).strip() != 'None' and
-                           str(date_cell.value).strip() != '')
-            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
-            
-            if has_real_date and has_dr_cr:
-                # Found the start of the transaction block
-                block_start_row = row_idx
-                break
-        
-        # Convert back to DataFrame row index
-        df_block_start = block_start_row - 10
-        
-        # SECOND: Look FORWARDS from the block start to find where it ends ("Entered By :")
-        current_row = block_start_row
-        while current_row <= ws.max_row:
-            # Convert Excel row number to DataFrame row index
-            df_row_index = current_row - 10
-            if df_row_index >= 0:
-                block_rows.append(df_row_index)
-            
-            # Check if this row contains "Entered By :" in the Particulars column (Column B)
-            particulars_cell = ws.cell(row=current_row, column=2)
-            if particulars_cell.value and str(particulars_cell.value).strip() == 'Entered By :':
-                # Found "Entered By :", this is the end of the block
-                break
-            
-            # Check if this row starts a NEW transaction block (Date + Dr/Cr)
-            date_cell = ws.cell(row=current_row, column=1)  # Column A (Date)
-            particulars_cell = ws.cell(row=current_row, column=2)  # Column B (Particulars)
-            
-            # Only treat as new block if it has a REAL date (not 'None' or empty) AND Dr/Cr
-            has_real_date = (date_cell.value and 
-                           str(date_cell.value).strip() and 
-                           str(date_cell.value).strip() != 'None' and
-                           str(date_cell.value).strip() != '')
-            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
-            
-            # If we find a new transaction block start, stop here
-            if has_real_date and has_dr_cr and current_row > block_start_row:
-                # This row starts a new transaction block, so don't include it
-                # The current block ends at the previous row
-                break
-            
-            current_row += 1
-        
-        wb.close()
-        
-        print(f"DEBUG: Transaction block for LC match at row {lc_match_row} spans {len(block_rows)} rows: {block_rows}")
-        print(f"DEBUG: Block starts at row {df_block_start} and includes rows up to 'Entered By :'")
-        return block_rows
-    
-    def find_narration_row_in_block(self, block_rows, file_path):
-        """
-        Find the first row of the narration block (where Date and DR/CR have values).
-        
-        Args:
-            block_rows: List of row indices that belong to the transaction block
-            file_path: Path to the Excel file to analyze
-        
-        Returns:
-            Row index of the first row of the narration block, or None if not found
-        """
-        # Load workbook with openpyxl to access formatting
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        
-        narration_block_start = None
-        
-        # Look for the first row of the narration block (where Date and DR/CR have values)
-        for block_row in block_rows:
-            # Convert DataFrame row index to Excel row number (add 9 because DataFrame starts at 0, Excel starts at 9)
-            excel_row = block_row + 9
-            
-            if excel_row <= ws.max_row:
-                date_cell = ws.cell(row=excel_row, column=3)  # Column C (Date)
-                debit_cell = ws.cell(row=excel_row, column=5)  # Column E (Debit)
-                credit_cell = ws.cell(row=excel_row, column=6)  # Column F (Credit)
-                
-                # Check if this row has Date and DR/CR values (start of narration block)
-                has_date = date_cell.value and str(date_cell.value).strip()
-                has_debit = debit_cell.value and str(debit_cell.value).strip() and str(debit_cell.value) != 'nan'
-                has_credit = credit_cell.value and str(credit_cell.value).strip() and str(credit_cell.value) != 'nan'
-                
-                # This is the start of narration block if it has Date and either Debit or Credit
-                if has_date and (has_debit or has_credit):
-                    narration_block_start = block_row
-                    print(f"DEBUG: Found narration block start at Excel row {excel_row} with Date='{date_cell.value}', Debit='{debit_cell.value}', Credit='{credit_cell.value}'")
-                    break
-        
-        wb.close()
-        
-        if narration_block_start is not None:
-            print(f"DEBUG: Found narration block start at index {narration_block_start}")
-        else:
-            print(f"DEBUG: No narration block start found in transaction block")
-        
-        return narration_block_start
 
+    
+
+    
     def create_audit_info(self, match):
         """Create audit info in clean, readable plaintext format."""
         # Use the validated amounts from the matching process
@@ -662,7 +539,7 @@ class ExcelTransactionMatcher:
             print(f"    DEBUG: Setting File1 row {file1_row_idx} col 1 to '{audit_info[:50]}...'")
             
             # Find the entire transaction block for file1 and populate all rows
-            file1_block_rows = self.get_transaction_block_rows(file1_row_idx, self.file1_path)
+            file1_block_rows = self.block_identifier.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
             # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row
@@ -685,7 +562,7 @@ class ExcelTransactionMatcher:
             print(f"    DEBUG: Setting File2 row {file2_row_idx} col 1 to '{audit_info[:50]}...'")
             
             # Find the entire transaction block for file2 and populate all rows
-            file2_block_rows = self.get_transaction_block_rows(file2_row_idx, self.file2_path)
+            file2_block_rows = self.block_identifier.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
             # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row

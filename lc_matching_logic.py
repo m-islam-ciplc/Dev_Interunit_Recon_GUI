@@ -27,6 +27,11 @@ class LCMatchingLogic:
         print(f"2. Check if 'Entered By' names are the same")
         print(f"3. Check if LC numbers match between them")
         print(f"4. Only if all three match: Assign same Match ID")
+        print(f"5. IMPORTANT: All transactions with same LC+Amount+EnteredBy get SAME Match ID")
+        
+        # Create a dictionary to track which combinations have already been matched
+        # Key: (LC_Number, Amount, Entered_By), Value: match_id
+        existing_matches = {}
         
         # Process each transaction in File 1 to find matches in File 2
         for idx1, lc1 in enumerate(lc_numbers1):
@@ -40,6 +45,7 @@ class LCMatchingLogic:
             header_row1 = transactions1.iloc[block_header1]
             
             # Extract amounts and determine transaction type for File 1
+            # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
             file1_debit = header_row1.iloc[7] if pd.notna(header_row1.iloc[7]) else 0
             file1_credit = header_row1.iloc[8] if pd.notna(header_row1.iloc[8]) else 0
             
@@ -65,6 +71,7 @@ class LCMatchingLogic:
                 header_row2 = transactions2.iloc[block_header2]
                 
                 # Extract amounts and determine transaction type for File 2
+                # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
                 file2_debit = header_row2.iloc[7] if pd.notna(header_row2.iloc[7]) else 0
                 file2_credit = header_row2.iloc[8] if pd.notna(header_row2.iloc[8]) else 0
                 
@@ -105,12 +112,24 @@ class LCMatchingLogic:
                     continue
                 
                 print(f"      ✅ STEP 4 PASSED: LC numbers match")
+                
+                # STEP 5: Check if we already have a match for this combination
+                match_key = (lc1, file1_amount, file1_entered_by)
+                
+                if match_key in existing_matches:
+                    # Use existing Match ID for consistency
+                    match_id = existing_matches[match_key]
+                    print(f"      🔄 REUSING existing Match ID: {match_id}")
+                else:
+                    # Create new Match ID
+                    match_counter += 1
+                    match_id = f"M{match_counter:03d}"
+                    existing_matches[match_key] = match_id
+                    print(f"      🆕 CREATING new Match ID: {match_id}")
+                
                 print(f"      🎉 ALL CRITERIA MET - MATCH FOUND!")
                 
-                # All three criteria met! Create the match
-                match_counter += 1
-                match_id = f"M{match_counter:03d}"
-                
+                # Create the match
                 matches.append({
                     'match_id': match_id,
                     'File1_Index': block_header1,
@@ -132,7 +151,7 @@ class LCMatchingLogic:
                 })
         
         print(f"\n=== MATCHING RESULTS ===")
-        print(f"Found {len(matches)} valid matches across {match_counter} unique Match IDs!")
+        print(f"Found {len(matches)} valid matches across {len(existing_matches)} unique Match ID combinations!")
         
         # Show some examples
         if matches:
@@ -162,6 +181,7 @@ class LCMatchingLogic:
             has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() != ''
             
             # Check if this row has either Debit or Credit amount (not both nan)
+            # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
             has_debit = pd.notna(row.iloc[7]) and row.iloc[7] != 0
             has_credit = pd.notna(row.iloc[8]) and row.iloc[8] != 0
             
@@ -180,12 +200,9 @@ class LCMatchingLogic:
             particulars = row.iloc[1]  # Column B (Particulars)
             
             if pd.notna(particulars) and str(particulars).strip() == 'Entered By :':
-                # Found "Entered By :", get the name from the next column
-                if row_idx + 1 < len(transactions_df):
-                    name_row = transactions_df.iloc[row_idx + 1]
-                    name = name_row.iloc[2]  # Column C (Description)
-                    return str(name).strip() if pd.notna(name) else "Unknown"
-                break
+                # Found "Entered By :", get the name from the SAME row, column 2
+                name = row.iloc[2]  # Column C (Description) - same row as "Entered By :"
+                return str(name).strip() if pd.notna(name) else "Unknown"
         
         return "Unknown"
     
