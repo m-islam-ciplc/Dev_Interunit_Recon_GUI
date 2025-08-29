@@ -9,37 +9,18 @@ import argparse
 from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
+from po_matching_logic import POMatchingLogic
 from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
-# CONFIGURATION SECTION - MODIFY THESE PATHS AS NEEDED
+# CONFIGURATION SECTION
 # =============================================================================
-
-# Input file paths - Update these to point to your Excel files
-INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
-INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"
-
-# Output folder - Where to save the matched files
-OUTPUT_FOLDER = "Output"
-
-# File naming patterns for output files
-OUTPUT_SUFFIX = "_MATCHED.xlsx"
-SIMPLE_SUFFIX = "_SIMPLE.xlsx"
-
-# Processing options
-CREATE_SIMPLE_FILES = False  # Set to False if you don't want simple test files
-CREATE_ALT_FILES = False     # Set to False if you don't want alternative files
-VERBOSE_DEBUG = True         # Set to False to reduce debug output
-
-# LC Number extraction pattern (modify if your LC numbers have different format)
-LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
-
-# Amount matching tolerance (for rounding differences)
-AMOUNT_TOLERANCE = 0.01  # Set to 0 for exact matching, or higher for tolerance
-
-# =============================================================================
-# END CONFIGURATION SECTION
-# =============================================================================
+# Import configuration from dedicated config module
+from config import (
+    INPUT_FILE1_PATH, INPUT_FILE2_PATH, OUTPUT_FOLDER, OUTPUT_SUFFIX,
+    SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, CREATE_ALT_FILES, VERBOSE_DEBUG,
+    LC_PATTERN, PO_PATTERN, AMOUNT_TOLERANCE
+)
 
 def print_configuration():
     """Print current configuration settings."""
@@ -83,7 +64,8 @@ class ExcelTransactionMatcher:
         self.transactions1 = None
         self.metadata2 = None
         self.transactions2 = None
-        self.matching_logic = LCMatchingLogic()
+        self.lc_matching_logic = LCMatchingLogic()
+        self.po_matching_logic = POMatchingLogic()
         self.block_identifier = TransactionBlockIdentifier()
         
     def read_complex_excel(self, file_path: str):
@@ -121,6 +103,18 @@ class ExcelTransactionMatcher:
             return match.group() if match else None
         
         return description_series.apply(extract_single_lc)
+    
+    def extract_po_numbers(self, description_series):
+        """Extract PO numbers from transaction descriptions."""
+        def extract_single_po(description):
+            if pd.isna(description):
+                return None
+            
+            # Pattern for PO numbers: XXX/PO/YYYY/M/NNNNN format
+            match = re.search(PO_PATTERN, str(description).upper())
+            return match.group() if match else None
+        
+        return description_series.apply(extract_single_po)
     
     def extract_lc_numbers_with_validation(self, description_series, transactions_df):
         """Extract LC numbers and link them to parent transaction rows."""
@@ -215,6 +209,64 @@ class ExcelTransactionMatcher:
         self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
         
         return pd.Series(lc_numbers)
+    
+    def extract_po_numbers_from_narration(self, file_path):
+        """Extract PO numbers from narration rows (italic text Column C - not bold, but italic) using openpyxl formatting."""
+        # Load workbook with openpyxl to access formatting
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        
+        # Create a list to store PO numbers for each row in the DataFrame
+        # We need to align with the transactions DataFrame structure
+        po_numbers = []
+        po_parent_rows = []
+        
+        # First, get the transactions DataFrame to know how many rows we need
+        transactions_df = self.read_complex_excel(file_path)[1]  # Get transactions part
+        total_rows = len(transactions_df)
+        
+        # Initialize with None for all rows
+        for i in range(total_rows):
+            po_numbers.append(None)
+            po_parent_rows.append(None)
+        
+        # Now scan for PO numbers in narration rows and map them to DataFrame indices
+        for excel_row in range(9, ws.max_row + 1):  # Excel rows start from 9
+            particulars_cell = ws.cell(row=excel_row, column=2)
+            desc_cell = ws.cell(row=excel_row, column=3)
+            
+            # Check if this is a narration row (italic text Column C - not bold, but italic)
+            is_narration = (desc_cell.value and 
+                           desc_cell.font and 
+                           not desc_cell.font.bold and 
+                           desc_cell.font.italic)
+            
+            if is_narration:
+                # This is a narration row, check for PO numbers
+                narration_text = str(desc_cell.value)
+                po = self.extract_po_numbers(pd.Series([narration_text])).iloc[0]
+                
+                if po is not None:
+                    # Found PO in narration row, need to find parent transaction row
+                    parent_row = self.find_parent_transaction_row_with_formatting(ws, excel_row)
+                    if parent_row is not None:
+                        # Convert Excel row to DataFrame index
+                        df_index = parent_row - 9  # Excel row 9 = DataFrame index 0
+                        if 0 <= df_index < total_rows:
+                            print(f"DEBUG: PO {po} at Excel row {excel_row} -> DataFrame index {df_index}")
+                            po_numbers[df_index] = po
+                            po_parent_rows[df_index] = df_index
+                        else:
+                            print(f"DEBUG: PO {po} at Excel row {excel_row} - INVALID DataFrame index {df_index}")
+                    else:
+                        print(f"DEBUG: PO {po} at Excel row {excel_row} - NO PARENT FOUND!")
+        
+        wb.close()
+        
+        # Store parent row mapping for later use
+        self.po_parent_mapping = dict(zip(range(len(po_numbers)), po_parent_rows))
+        
+        return pd.Series(po_numbers)
     
     def find_parent_transaction_row(self, current_row, transactions_df):
         """Find the parent transaction row for a description row."""
@@ -336,6 +388,11 @@ class ExcelTransactionMatcher:
         lc_numbers1 = self.extract_lc_numbers_from_narration(self.file1_path)
         lc_numbers2 = self.extract_lc_numbers_from_narration(self.file2_path)
         
+        # Extract PO numbers from narration rows (italic Column C) using formatting
+        print("Extracting PO numbers from narration rows using formatting...")
+        po_numbers1 = self.extract_po_numbers_from_narration(self.file1_path)
+        po_numbers2 = self.extract_po_numbers_from_narration(self.file2_path)
+        
         # Identify transaction blocks using formatting
         print("Identifying transaction blocks using formatting...")
         blocks1 = self.block_identifier.identify_transaction_blocks(self.transactions1, self.file1_path)
@@ -344,18 +401,70 @@ class ExcelTransactionMatcher:
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
         
-        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2
+        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2
     
     def find_potential_matches(self):
-        """Find potential LC number matches between the two files."""
-        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2 = self.process_files()
+        """Find potential LC and PO number matches between the two files (sequential approach)."""
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2 = self.process_files()
         
-        # Use the new matching logic class
-        matches = self.matching_logic.find_potential_matches(
+        print("\n" + "="*60)
+        print("STEP 1: LC MATCHING")
+        print("="*60)
+        
+        # Step 1: Find LC matches
+        lc_matches = self.lc_matching_logic.find_potential_matches(
             transactions1, transactions2, lc_numbers1, lc_numbers2
         )
         
-        return matches
+        print(f"\nLC Matching Results: {len(lc_matches)} matches found")
+        
+        # Step 2: Find PO matches on UNMATCHED records
+        print("\n" + "="*60)
+        print("STEP 2: PO MATCHING (ON UNMATCHED RECORDS)")
+        print("="*60)
+        
+        # Create masks for unmatched records
+        lc_matched_indices1 = set()
+        lc_matched_indices2 = set()
+        
+        for match in lc_matches:
+            lc_matched_indices1.add(match['File1_Index'])
+            lc_matched_indices2.add(match['File2_Index'])
+        
+        # Filter PO numbers to only unmatched records
+        po_numbers1_unmatched = po_numbers1.copy()
+        po_numbers2_unmatched = po_numbers2.copy()
+        
+        # Mark matched records as None in PO numbers
+        for idx in lc_matched_indices1:
+            if idx < len(po_numbers1_unmatched):
+                po_numbers1_unmatched.iloc[idx] = None
+        
+        for idx in lc_matched_indices2:
+            if idx < len(po_numbers2_unmatched):
+                po_numbers2_unmatched.iloc[idx] = None
+        
+        print(f"File 1: {len(po_numbers1_unmatched[po_numbers1_unmatched.notna()])} unmatched PO numbers")
+        print(f"File 2: {len(po_numbers2_unmatched[po_numbers2_unmatched.notna()])} unmatched PO numbers")
+        
+        # Find PO matches on unmatched records
+        po_matches = self.po_matching_logic.find_potential_matches(
+            transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched
+        )
+        
+        print(f"\nPO Matching Results: {len(po_matches)} matches found")
+        
+        # Combine all matches
+        all_matches = lc_matches + po_matches
+        
+        print(f"\n" + "="*60)
+        print("FINAL RESULTS")
+        print("="*60)
+        print(f"Total Matches: {len(all_matches)}")
+        print(f"  - LC Matches: {len(lc_matches)}")
+        print(f"  - PO Matches: {len(po_matches)}")
+        
+        return all_matches
     
     def find_transaction_block_header(self, current_row, transactions_df):
         """Find the transaction block header row (with date and particulars) for a given row."""
@@ -402,13 +511,22 @@ class ExcelTransactionMatcher:
 
     
     def create_audit_info(self, match):
-        """Create audit info in clean, readable plaintext format."""
+        """Create audit info in clean, readable plaintext format for both LC and PO matches."""
         # Use the validated amounts from the matching process
         lender_amount = match['File1_Amount'] if match['File1_Type'] == 'Lender' else match['File2_Amount']
         borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
         
-        # Create clean, readable plaintext format
-        audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        # Determine match type and create appropriate audit info
+        if 'LC_Number' in match and match['LC_Number']:
+            # This is an LC match
+            audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        elif 'PO_Number' in match and match['PO_Number']:
+            # This is a PO match
+            audit_info = f"PO Match: {match['PO_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        else:
+            # Fallback for unknown match type
+            audit_info = f"Unknown Match Type\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+        
         return audit_info
     
     def _preserve_tally_date_format(self, transactions_df: pd.DataFrame):
@@ -528,7 +646,10 @@ class ExcelTransactionMatcher:
             audit_info = self.create_audit_info(match)
             
             print(f"Match {match_id}:")
-            print(f"  LC Number: {match['LC_Number']}")
+            if 'LC_Number' in match and match['LC_Number']:
+                print(f"  LC Number: {match['LC_Number']}")
+            elif 'PO_Number' in match and match['PO_Number']:
+                print(f"  PO Number: {match['PO_Number']}")
             print(f"  File1 Row {match['File1_Index']}: Debit={match['File1_Debit']}, Credit={match['File1_Credit']}")
             print(f"  File2 Row {match['File2_Index']}: Debit={match['File2_Debit']}, Credit={match['File2_Credit']}")
             print(f"  Audit Info: {audit_info}")
@@ -815,7 +936,9 @@ def main():
     # Create matcher instance
     matcher = ExcelTransactionMatcher(INPUT_FILE1_PATH, INPUT_FILE2_PATH)
     matches = matcher.find_potential_matches()
-    transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2 = matcher.process_files()
+    # Get the data from the matcher instance
+    transactions1 = matcher.transactions1
+    transactions2 = matcher.transactions2
     
     print(f"\n=== SUMMARY ===")
     print(f"Total potential matches found: {len(matches)}")
