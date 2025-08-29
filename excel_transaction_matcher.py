@@ -16,8 +16,8 @@ from transaction_block_identifier import TransactionBlockIdentifier
 # =============================================================================
 
 # Input file paths - Update these to point to your Excel files
-INPUT_FILE1_PATH = "Input Files/Interunit GeoTex.xlsx"
-INPUT_FILE2_PATH = "Input Files/Interunit Steel.xlsx"
+INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
+INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"
 
 # Output folder - Where to save the matched files
 OUTPUT_FOLDER = "Output"
