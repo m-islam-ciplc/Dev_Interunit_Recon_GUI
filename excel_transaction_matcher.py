@@ -603,6 +603,7 @@ class ExcelTransactionMatcher:
         worksheet.column_dimensions['I'].width = 9.00
         worksheet.column_dimensions['J'].width = 12.78
         worksheet.column_dimensions['K'].width = 14.22
+        worksheet.column_dimensions['L'].width = 10.22
 
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
@@ -632,6 +633,14 @@ class ExcelTransactionMatcher:
         print(f"DEBUG: File2 DataFrame created with shape: {file2_matched.shape}")
         print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
         
+        # Add Match Type column at the end (last column)
+        file1_matched['Match Type'] = None
+        file2_matched['Match Type'] = None
+        
+        print(f"DEBUG: Added Match Type column to both DataFrames")
+        print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
+        print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
+        
         # Verify the new columns are actually there
         print(f"DEBUG: File1 first few rows of Match ID column:")
         print(file1_matched.iloc[:5, 0].tolist())
@@ -648,30 +657,38 @@ class ExcelTransactionMatcher:
             print(f"Match {match_id}:")
             if 'LC_Number' in match and match['LC_Number']:
                 print(f"  LC Number: {match['LC_Number']}")
+                match_type = 'LC'
             elif 'PO_Number' in match and match['PO_Number']:
                 print(f"  PO Number: {match['PO_Number']}")
+                match_type = 'PO'
+            else:
+                print(f"  Unknown Match Type")
+                match_type = 'Unknown'
             print(f"  File1 Row {match['File1_Index']}: Debit={match['File1_Debit']}, Credit={match['File1_Credit']}")
             print(f"  File2 Row {match['File2_Index']}: Debit={match['File2_Debit']}, Credit={match['File2_Credit']}")
             print(f"  Audit Info: {audit_info}")
+            print(f"  Match Type: {match_type}")
             
             # Update file1 - populate entire transaction block with Match ID and Audit Info
             file1_row_idx = match['File1_Index']
             print(f"    DEBUG: Setting File1 row {file1_row_idx} col 0 to '{match_id}'")
             print(f"    DEBUG: Setting File1 row {file1_row_idx} col 1 to '{audit_info[:50]}...'")
+            print(f"    DEBUG: Setting File1 row {file1_row_idx} col -1 to '{match_type}' (last column)")
             
             # Find the entire transaction block for file1 and populate all rows
             file1_block_rows = self.block_identifier.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID, but Audit Info and Match Type only in second-to-last row
             for i, block_row in enumerate(file1_block_rows):
                 if 0 <= block_row < len(file1_matched):
                     file1_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
                     
-                    # Audit Info goes ONLY in the second-to-last row of the transaction block
+                    # Audit Info and Match Type go ONLY in the second-to-last row of the transaction block
                     if i == len(file1_block_rows) - 2:  # Second-to-last row
                         file1_matched.iloc[block_row, 1] = audit_info
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Audit Info (second-to-last row)")
+                        file1_matched.iloc[block_row, -1] = match_type  # Match Type only in second-to-last row
+                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
                     else:
                         print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' only")
             
@@ -681,20 +698,22 @@ class ExcelTransactionMatcher:
             file2_row_idx = match['File2_Index']
             print(f"    DEBUG: Setting File2 row {file2_row_idx} col 0 to '{match_id}'")
             print(f"    DEBUG: Setting File2 row {file2_row_idx} col 1 to '{audit_info[:50]}...'")
+            print(f"    DEBUG: Setting File2 row {file2_row_idx} col -1 to '{match_type}' (last column)")
             
             # Find the entire transaction block for file2 and populate all rows
             file2_block_rows = self.block_identifier.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID, but Audit Info only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID, but Audit Info and Match Type only in second-to-last row
             for i, block_row in enumerate(file2_block_rows):
                 if 0 <= block_row < len(file2_matched):
                     file2_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
                     
-                    # Audit Info goes ONLY in the second-to-last row of the transaction block
+                    # Audit Info and Match Type go ONLY in the second-to-last row of the transaction block
                     if i == len(file2_block_rows) - 2:  # Second-to-last row
                         file2_matched.iloc[block_row, 1] = audit_info
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Audit Info (second-to-last row)")
+                        file2_matched.iloc[block_row, -1] = match_type  # Match Type only in second-to-last row
+                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
                     else:
                         print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' only")
         
@@ -709,8 +728,10 @@ class ExcelTransactionMatcher:
             print(f"\n=== DEBUG: BEFORE SAVING ===")
             print(f"File1 - Rows with Match IDs: {file1_matched.iloc[:, 0].notna().sum()}")
             print(f"File1 - Rows with Audit Info: {file1_matched.iloc[:, 1].notna().sum()}")
+            print(f"File1 - Rows with Match Type: {file1_matched.iloc[:, -1].notna().sum()}")
             print(f"File2 - Rows with Match IDs: {file2_matched.iloc[:, 0].notna().sum()}")
             print(f"File2 - Rows with Audit Info: {file2_matched.iloc[:, 1].notna().sum()}")
+            print(f"File2 - Rows with Match Type: {file2_matched.iloc[:, -1].notna().sum()}")
             
             # Show some actual values to verify they're there
             print(f"\n=== DEBUG: ACTUAL VALUES IN DATAFRAME ===")
@@ -815,6 +836,7 @@ class ExcelTransactionMatcher:
             print(f"File1 loaded successfully, shape: {df_check1.shape}")
             print(f"File1 - Rows with Match IDs: {df_check1.iloc[:, 0].notna().sum()}")
             print(f"File1 - Rows with Audit Info: {df_check1.iloc[:, 1].notna().sum()}")
+            print(f"File1 - Rows with Match Type: {df_check1.iloc[:, -1].notna().sum()}")
             
             # Check if text wrapping was applied by reading the Excel file with openpyxl
             print(f"\n=== VERIFYING TEXT WRAPPING IN FILE 1 ===")
@@ -841,6 +863,7 @@ class ExcelTransactionMatcher:
             print(f"File2 loaded successfully, shape: {df_check2.shape}")
             print(f"File2 - Rows with Match IDs: {df_check2.iloc[:, 0].notna().sum()}")
             print(f"File2 - Rows with Audit Info: {df_check2.iloc[:, 1].notna().sum()}")
+            print(f"File2 - Rows with Match Type: {df_check2.iloc[:, -1].notna().sum()}")
             
             # Check if text wrapping was applied by reading the Excel file with openpyxl
             print(f"\n=== VERIFYING TEXT WRAPPING IN FILE 2 ===")
@@ -889,6 +912,13 @@ class ExcelTransactionMatcher:
         print(f"File 1 - Audit Info populated: {len(audit_info_1)}")
         print(f"File 2 - Audit Info populated: {len(audit_info_2)}")
         
+        # Check Match Type column population - only count non-empty, non-NaN values
+        match_types_1 = file1_matched.iloc[:, -1].replace('', None).dropna()
+        match_types_2 = file2_matched.iloc[:, -1].replace('', None).dropna()
+        
+        print(f"File 1 - Match Types populated: {len(match_types_1)}")
+        print(f"File 2 - Match Types populated: {len(match_types_2)}")
+        
         # Show sample populated data
         if len(match_ids_1) > 0:
             print(f"\nFile 1 - Sample populated rows:")
@@ -898,9 +928,10 @@ class ExcelTransactionMatcher:
                 if mask.any():
                     row_idx = file1_matched[mask].index[0]
                     print(f"  Row {row_idx}: Match ID = {match_id}")
-                    print(f"    Date: {file1_matched.iloc[row_idx, 2]}")
-                    print(f"    Description: {str(file1_matched.iloc[row_idx, 3])[:50]}...")
-                    print(f"    Debit: {file1_matched.iloc[row_idx, 9]}, Credit: {file1_matched.iloc[row_idx, 10]}")
+                    print(f"    Date: {file1_matched.iloc[row_idx, 3]}")
+                    print(f"    Description: {str(file1_matched.iloc[row_idx, 4])[:50]}...")
+                    print(f"    Debit: {file1_matched.iloc[row_idx, 10]}, Credit: {file1_matched.iloc[row_idx, 11]}")
+                    print(f"    Match Type: {file1_matched.iloc[row_idx, -1]}")
         
         if len(match_ids_2) > 0:
             print(f"\nFile 2 - Sample populated rows:")
@@ -910,9 +941,10 @@ class ExcelTransactionMatcher:
                 if mask.any():
                     row_idx = file2_matched[mask].index[0]
                     print(f"  Row {row_idx}: Match ID = {match_id}")
-                    print(f"    Date: {file2_matched.iloc[row_idx, 2]}")
-                    print(f"    Description: {str(file2_matched.iloc[row_idx, 3])[:50]}...")
-                    print(f"    Debit: {file2_matched.iloc[row_idx, 9]}, Credit: {file2_matched.iloc[row_idx, 10]}")
+                    print(f"    Date: {file2_matched.iloc[row_idx, 3]}")
+                    print(f"    Description: {str(file2_matched.iloc[row_idx, 4])[:50]}...")
+                    print(f"    Debit: {file2_matched.iloc[row_idx, 10]}, Credit: {file2_matched.iloc[row_idx, 11]}")
+                    print(f"    Match Type: {file2_matched.iloc[row_idx, -1]}")
 
 def main():
     # Show current configuration
