@@ -411,10 +411,19 @@ class ExcelTransactionMatcher:
         print("STEP 1: LC MATCHING")
         print("="*60)
         
+        # Initialize shared state for consistent Match IDs across LC and PO matching
+        shared_existing_matches = {}
+        shared_match_counter = 0
+        
         # Step 1: Find LC matches
         lc_matches = self.lc_matching_logic.find_potential_matches(
-            transactions1, transactions2, lc_numbers1, lc_numbers2
+            transactions1, transactions2, lc_numbers1, lc_numbers2,
+            shared_existing_matches, shared_match_counter
         )
+        
+        # Update the shared counter after LC matching
+        if lc_matches:
+            shared_match_counter = max(int(match['match_id'][1:]) for match in lc_matches)
         
         print(f"\nLC Matching Results: {len(lc_matches)} matches found")
         
@@ -447,9 +456,10 @@ class ExcelTransactionMatcher:
         print(f"File 1: {len(po_numbers1_unmatched[po_numbers1_unmatched.notna()])} unmatched PO numbers")
         print(f"File 2: {len(po_numbers2_unmatched[po_numbers2_unmatched.notna()])} unmatched PO numbers")
         
-        # Find PO matches on unmatched records
+        # Find PO matches on unmatched records with shared state
         po_matches = self.po_matching_logic.find_potential_matches(
-            transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched
+            transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched,
+            shared_existing_matches, shared_match_counter
         )
         
         print(f"\nPO Matching Results: {len(po_matches)} matches found")
@@ -601,9 +611,35 @@ class ExcelTransactionMatcher:
         worksheet.column_dimensions['G'].width = 5.00
         worksheet.column_dimensions['H'].width = 12.78
         worksheet.column_dimensions['I'].width = 9.00
-        worksheet.column_dimensions['J'].width = 12.78
+        worksheet.column_dimensions['J'].width = 13.78
         worksheet.column_dimensions['K'].width = 14.22
-        worksheet.column_dimensions['L'].width = 10.22
+        worksheet.column_dimensions['L'].width = 11.22
+
+    def _apply_top_alignment(self, worksheet):
+        """Apply top alignment and text wrapping to ALL cells in the worksheet."""
+        print(f"Setting top alignment for {worksheet.max_row} rows × {worksheet.max_column} columns...")
+        
+        for row in range(1, worksheet.max_row + 1):  # ALL rows from 1 to max
+            for col in range(1, worksheet.max_column + 1):  # ALL columns
+                try:
+                    cell = worksheet.cell(row=row, column=col)
+                    
+                    # Always create a new alignment object to avoid style conflicts
+                    new_alignment = Alignment(vertical='top')
+                    
+                    # Enable text wrapping for columns B (Audit Info) and E (Description)
+                    if col in [2, 5]:  # Columns B and E
+                        new_alignment.wrap_text = True
+                    
+                    # Apply the new alignment (this overwrites any existing alignment)
+                    cell.alignment = new_alignment
+                        
+                except Exception as e:
+                    print(f"Error setting alignment for row {row}, col {col}: {e}")
+                    # Continue with next cell instead of stopping
+                    continue
+        
+        print(f"Top alignment applied successfully!")
 
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
@@ -763,23 +799,8 @@ class ExcelTransactionMatcher:
             self._set_column_widths(worksheet)
             self._format_amount_columns(worksheet) # Apply amount formatting
             
-            # Enable text wrapping for columns B (Audit Info) and E (Description)
-            # Note: wrap_text is a cell property, not column property
-            # We'll set it on ALL rows that contain data
-            for row in range(9, worksheet.max_row + 1):  # ALL rows from 9 to max
-                try:
-                    # Column B (Audit Info)
-                    cell_b = worksheet.cell(row=row, column=2)
-                    if cell_b.value:
-                        cell_b.alignment = Alignment(wrap_text=True, vertical='top')
-                    
-                    # Column E (Description)
-                    cell_e = worksheet.cell(row=row, column=5)
-                    if cell_e.value:
-                        cell_e.alignment = Alignment(wrap_text=True, vertical='top')
-                        
-                except Exception as e:
-                    print(f"Error setting text wrapping for row {row}: {e}")
+            # Apply top alignment and text wrapping to ALL cells in the worksheet
+            self._apply_top_alignment(worksheet)
             
                     
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
@@ -793,23 +814,8 @@ class ExcelTransactionMatcher:
             self._set_column_widths(worksheet)
             self._format_amount_columns(worksheet) # Apply amount formatting
             
-            # Enable text wrapping for columns B (Audit Info) and E (Description)
-            # Note: wrap_text is a cell property, not column property
-            # We'll set it on ALL rows that contain data
-            for row in range(9, worksheet.max_row + 1):  # ALL rows from 9 to max
-                try:
-                    # Column B (Audit Info)
-                    cell_b = worksheet.cell(row=row, column=2)
-                    if cell_b.value:
-                        cell_b.alignment = Alignment(wrap_text=True, vertical='top')
-                    
-                    # Column E (Description)
-                    cell_e = worksheet.cell(row=row, column=5)
-                    if cell_e.value:
-                        cell_e.alignment = Alignment(wrap_text=True, vertical='top')
-                        
-                except Exception as e:
-                    print(f"Error setting text wrapping for row {row}: {e}")
+            # Apply top alignment and text wrapping to ALL cells in the worksheet
+            self._apply_top_alignment(worksheet)
             
         
         # Also create a simple version without metadata to test (if enabled)

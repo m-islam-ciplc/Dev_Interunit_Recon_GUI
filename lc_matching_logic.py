@@ -9,7 +9,7 @@ class LCMatchingLogic:
     def __init__(self):
         self.amount_tolerance = AMOUNT_TOLERANCE
     
-    def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2):
+    def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2, existing_matches=None, match_counter=0):
         """Find potential LC number matches between the two files."""
         # Filter rows with LC numbers
         lc_transactions1 = transactions1[lc_numbers1.notna()].copy()
@@ -20,7 +20,12 @@ class LCMatchingLogic:
         
         # Find matches - NEW LOGIC: Amount → Entered By → LC Number
         matches = []
-        match_counter = 0
+        
+        # Use shared state if provided, otherwise create new
+        if existing_matches is None:
+            existing_matches = {}
+        if match_counter is None:
+            match_counter = 0
         
         print(f"\n=== NEW MATCHING LOGIC ===")
         print(f"1. Check if lender debit and borrower credit amounts are EXACTLY the same")
@@ -29,9 +34,8 @@ class LCMatchingLogic:
         print(f"4. Only if all three match: Assign same Match ID")
         print(f"5. IMPORTANT: All transactions with same LC+Amount+EnteredBy get SAME Match ID")
         
-        # Create a dictionary to track which combinations have already been matched
+        # Use shared state for tracking which combinations have already been matched
         # Key: (LC_Number, Amount, Entered_By), Value: match_id
-        existing_matches = {}
         
         # Process each transaction in File 1 to find matches in File 2
         for idx1, lc1 in enumerate(lc_numbers1):
