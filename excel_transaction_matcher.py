@@ -641,6 +641,16 @@ class ExcelTransactionMatcher:
         
         print(f"Top alignment applied successfully!")
 
+    def _apply_filters_to_header(self, worksheet):
+        """Apply filters to the header row (Row 9) for easy data filtering and sorting."""
+        try:
+            # Apply filters to Row 9 (header row)
+            # Note: openpyxl uses 1-based indexing, so Row 9 is actually row 9
+            worksheet.auto_filter.ref = f"A9:L9"
+            print(f"Filters applied to header row (Row 9) successfully!")
+        except Exception as e:
+            print(f"Error applying filters to header row: {e}")
+
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
         if not matches:
@@ -802,6 +812,9 @@ class ExcelTransactionMatcher:
             # Apply top alignment and text wrapping to ALL cells in the worksheet
             self._apply_top_alignment(worksheet)
             
+            # Apply filters to the header row for easy data filtering and sorting
+            self._apply_filters_to_header(worksheet)
+            
                     
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
@@ -816,6 +829,9 @@ class ExcelTransactionMatcher:
             
             # Apply top alignment and text wrapping to ALL cells in the worksheet
             self._apply_top_alignment(worksheet)
+            
+            # Apply filters to the header row for easy data filtering and sorting
+            self._apply_filters_to_header(worksheet)
             
         
         # Also create a simple version without metadata to test (if enabled)
