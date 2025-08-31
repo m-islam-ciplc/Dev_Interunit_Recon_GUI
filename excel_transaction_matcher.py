@@ -10,7 +10,6 @@ from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
 from po_matching_logic import POMatchingLogic
-from rectify_matching_logic import RectifyMatchingLogic
 
 from interunit_loan_matcher import InterunitLoanMatcher
 from transaction_block_identifier import TransactionBlockIdentifier
@@ -72,7 +71,6 @@ class   ExcelTransactionMatcher:
         self.transactions2 = None
         self.lc_matching_logic = LCMatchingLogic()
         self.po_matching_logic = POMatchingLogic()
-        self.rectify_matching_logic = RectifyMatchingLogic()
 
         self.interunit_loan_matcher = InterunitLoanMatcher()
         self.block_identifier = TransactionBlockIdentifier()
@@ -527,39 +525,8 @@ class   ExcelTransactionMatcher:
         
         print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
         
-        # Step 4: Find Rectify Entry matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 4: RECTIFY ENTRY MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after LC, PO, and Interunit matching)
-        lc_po_interunit_matched_indices1 = set()
-        lc_po_interunit_matched_indices2 = set()
-        
-        for match in lc_matches + po_matches + interunit_matches:
-            lc_po_interunit_matched_indices1.add(match['File1_Index'])
-            lc_po_interunit_matched_indices2.add(match['File2_Index'])
-        
-        # Filter to only unmatched records for rectify matching
-        transactions1_unmatched = transactions1[~transactions1.index.isin(lc_po_interunit_matched_indices1)].copy()
-        transactions2_unmatched = transactions2[~transactions2.index.isin(lc_po_interunit_matched_indices2)].copy()
-        
-        print(f"File 1: {len(transactions1_unmatched)} unmatched transactions for rectify matching")
-        print(f"File 2: {len(transactions2_unmatched)} unmatched transactions for rectify matching")
-        
-        # Find rectify entry matches on unmatched records with shared state
-        rectify_matches = self.rectify_matching_logic.find_potential_matches(
-            transactions1_unmatched, transactions2_unmatched, shared_existing_matches, shared_match_counter
-        )
-        
-        # Update the shared counter after rectify matching
-        if rectify_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in rectify_matches)
-        
-        print(f"\nRectify Entry Matching Results: {len(rectify_matches)} matches found")
-        
         # Combine all matches
-        all_matches = lc_matches + po_matches + interunit_matches + rectify_matches
+        all_matches = lc_matches + po_matches + interunit_matches
         
         print(f"\n" + "="*60)
         print("FINAL RESULTS")
