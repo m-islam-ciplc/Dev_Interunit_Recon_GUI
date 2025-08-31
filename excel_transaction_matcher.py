@@ -715,6 +715,75 @@ class ExcelTransactionMatcher:
             print(f"Filters applied to header row (Row 9) successfully!")
         except Exception as e:
             print(f"Error applying filters to header row: {e}")
+    
+    def _apply_alternating_background_colors(self, worksheet, file_matched_df):
+        """Apply alternating background colors to matched transaction blocks."""
+        try:
+            from openpyxl.styles import PatternFill
+            
+            # Define two alternating colors
+            color1 = PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid")  # Very light blue
+            color2 = PatternFill(start_color="FFFACD", end_color="FFFACD", fill_type="solid")  # Very light lemon yellow
+            
+            # Get all rows with Match IDs
+            match_id_column = file_matched_df.iloc[:, 0]  # First column (Match ID)
+            populated_rows = match_id_column.notna()
+            
+            if not populated_rows.any():
+                print("No matched rows found for background coloring")
+                return
+            
+            # Get unique Match IDs in order they appear
+            unique_match_ids = []
+            seen_ids = set()
+            for idx, match_id in enumerate(match_id_column):
+                if pd.notna(match_id) and match_id not in seen_ids:
+                    unique_match_ids.append(match_id)
+                    seen_ids.add(match_id)
+            
+            print(f"Applying alternating background colors to {len(unique_match_ids)} matched transaction blocks")
+            
+            # Apply alternating colors to each Match ID block
+            for block_index, match_id in enumerate(unique_match_ids):
+                # Choose color based on block index (alternating)
+                color = color1 if block_index % 2 == 0 else color2
+                
+                # Find all rows with this Match ID
+                block_rows = file_matched_df[file_matched_df.iloc[:, 0] == match_id].index
+                
+                # Apply color to all rows in this block
+                for df_row_idx in block_rows:
+                    excel_row = df_row_idx + 10  # Convert DataFrame index to Excel row (metadata + header offset)
+                    
+                    # Color all columns in this row
+                    for col in range(1, worksheet.max_column + 1):
+                        cell = worksheet.cell(row=excel_row, column=col)
+                        cell.fill = color
+                
+                print(f"  Block {match_id}: Applied {'Color 1' if block_index % 2 == 0 else 'Color 2'} to {len(block_rows)} rows")
+            
+            print("Background colors applied successfully!")
+            
+        except Exception as e:
+            print(f"Error applying background colors: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def create_matched_files(self, matches, transactions1, transactions2):
         """Create matched versions of both files with new columns."""
@@ -883,6 +952,9 @@ class ExcelTransactionMatcher:
             # Apply filters to the header row for easy data filtering and sorting
             self._apply_filters_to_header(worksheet)
             
+            # Apply alternating background colors to matched transaction blocks
+            self._apply_alternating_background_colors(worksheet, file1_matched)
+            
                     
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
@@ -900,6 +972,9 @@ class ExcelTransactionMatcher:
             
             # Apply filters to the header row for easy data filtering and sorting
             self._apply_filters_to_header(worksheet)
+            
+            # Apply alternating background colors to matched transaction blocks
+            self._apply_alternating_background_colors(worksheet, file2_matched)
             
         
         # Also create a simple version without metadata to test (if enabled)
