@@ -56,7 +56,7 @@ def update_configuration():
     print("9. LC_PATTERN - Regex pattern for LC number extraction")
     print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")
 
-class ExcelTransactionMatcher:
+class   ExcelTransactionMatcher:
     """
     Handles complex Excel files with metadata rows and transaction data.
     """
@@ -767,6 +767,122 @@ class ExcelTransactionMatcher:
         except Exception as e:
             print(f"Error applying background colors: {e}")
 
+    def _format_output_file_transaction_blocks(self, worksheet):
+        """Format output file transaction blocks: make ledger text bold, narration italic, and Entered By person's name bold+italic."""
+        try:
+            from openpyxl.styles import Font
+            
+            print("Formatting output file transaction blocks...")
+            
+            # Create fonts for different formatting
+            bold_font = Font(bold=True)
+            italic_font = Font(italic=True)
+            bold_italic_font = Font(bold=True, italic=True)
+            
+            # Process all rows starting from row 10 (after metadata and header)
+            for row in range(10, worksheet.max_row + 1):
+                # Check if this row is the end of a transaction block
+                cell_d = worksheet.cell(row=row, column=4)  # Column D (Particulars)
+                cell_e = worksheet.cell(row=row, column=5)  # Column E (Description)
+                
+                # Check if this row contains "Entered By :" in Column D
+                if (cell_d.value and 
+                    isinstance(cell_d.value, str) and 
+                    "Entered By :" in str(cell_d.value)):
+                    
+                    # This is the end of a transaction block
+                    # Make the Entered By person's name bold and italic
+                    if cell_e.value:
+                        cell_e.font = bold_italic_font
+                        print(f"  Row {row}: Made Entered By person's name bold+italic: '{str(cell_e.value)[:50]}...'")
+                    
+                    # The row above this contains narration text
+                    narration_row = row - 1
+                    
+                    if narration_row >= 10:  # Ensure we don't go below row 10
+                        narration_cell_e = worksheet.cell(row=narration_row, column=5)  # Column E
+                        
+                        # Make the narration text italic
+                        if narration_cell_e.value:
+                            narration_cell_e.font = italic_font
+                            print(f"  Row {narration_row}: Made narration text italic: '{str(narration_cell_e.value)[:50]}...'")
+                        
+                        # Now find the transaction block start and make all ledger text bold
+                        # Look backwards from narration row to find block start
+                        for ledger_row in range(narration_row - 1, 9, -1):  # Go back from narration to row 10
+                            # Check if this is a block start row
+                            date_cell = worksheet.cell(row=ledger_row, column=3)  # Column C (Date)
+                            particulars_cell = worksheet.cell(row=ledger_row, column=4)  # Column D (Particulars)
+                            vch_type_cell = worksheet.cell(row=ledger_row, column=8)  # Column H (Vch Type)
+                            vch_no_cell = worksheet.cell(row=ledger_row, column=9)  # Column I (Vch No)
+                            
+                            # Check if this is a block start (has date, Dr/Cr, Vch Type, Vch No)
+                            is_block_start = (date_cell.value and 
+                                            particulars_cell.value and 
+                                            str(particulars_cell.value).strip() in ['Dr', 'Cr'] and
+                                            vch_type_cell.value and 
+                                            vch_no_cell.value)
+                            
+                            if is_block_start:
+                                 # Found block start, now make all rows from here to narration bold
+                                 for bold_row in range(ledger_row, narration_row):
+                                     bold_cell_e = worksheet.cell(row=bold_row, column=5)  # Column E
+                                     if bold_cell_e.value:
+                                         bold_cell_e.font = bold_font
+                                         print(f"  Row {bold_row}: Made ledger text bold: '{str(bold_cell_e.value)[:50]}...'")
+                                 
+                                 # Also make Column H (Vch Type) bold in the first row of the transaction block
+                                 vch_type_cell = worksheet.cell(row=ledger_row, column=8)  # Column H (Vch Type)
+                                 if vch_type_cell.value:
+                                     vch_type_cell.font = bold_font
+                                     print(f"  Row {ledger_row}: Made Vch Type bold: '{str(vch_type_cell.value)[:50]}...'")
+                                 
+                                 # Make all Debit and Credit values (Columns J and K) bold in this transaction block
+                                 for bold_row in range(ledger_row, narration_row):
+                                     # Make Debit column (J) bold
+                                     debit_cell = worksheet.cell(row=bold_row, column=10)  # Column J (Debit)
+                                     if debit_cell.value and debit_cell.value != '':
+                                         debit_cell.font = bold_font
+                                         print(f"  Row {bold_row}: Made Debit value bold: '{str(debit_cell.value)[:20]}...'")
+                                     
+                                     # Make Credit column (K) bold
+                                     credit_cell = worksheet.cell(row=bold_row, column=11)  # Column K (Credit)
+                                     if credit_cell.value and credit_cell.value != '':
+                                         credit_cell.font = bold_font
+                                         print(f"  Row {bold_row}: Made Credit value bold: '{str(credit_cell.value)[:20]}...'")
+                                 
+                                 break
+            
+            # Also check for "Opening Balance" text and make it bold along with its Debit/Credit values
+            print("Checking for Opening Balance entries...")
+            for row in range(10, worksheet.max_row + 1):
+                cell_e = worksheet.cell(row=row, column=5)  # Column E (Description)
+                
+                # Check if this row contains "Opening Balance" text
+                if (cell_e.value and 
+                    isinstance(cell_e.value, str) and 
+                    "Opening Balance" in str(cell_e.value)):
+                    
+                    # Make the Opening Balance text bold
+                    cell_e.font = bold_font
+                    print(f"  Row {row}: Made Opening Balance text bold: '{str(cell_e.value)[:50]}...'")
+                    
+                    # Make the associated Debit and Credit values bold
+                    debit_cell = worksheet.cell(row=row, column=10)  # Column J (Debit)
+                    if debit_cell.value and debit_cell.value != '':
+                        debit_cell.font = bold_font
+                        print(f"  Row {row}: Made Opening Balance Debit value bold: '{str(debit_cell.value)[:20]}...'")
+                    
+                    credit_cell = worksheet.cell(row=row, column=11)  # Column K (Credit)
+                    if credit_cell.value and credit_cell.value != '':
+                        credit_cell.font = bold_font
+                        print(f"  Row {row}: Made Opening Balance Credit value bold: '{str(credit_cell.value)[:20]}...'")
+            
+            print("Output file transaction block formatting completed successfully!")
+            
+        except Exception as e:
+            print(f"Error formatting output file transaction blocks: {e}")
+
 
 
 
@@ -955,6 +1071,9 @@ class ExcelTransactionMatcher:
             # Apply alternating background colors to matched transaction blocks
             self._apply_alternating_background_colors(worksheet, file1_matched)
             
+            # Format output file transaction blocks (make narration italic)
+            self._format_output_file_transaction_blocks(worksheet)
+            
                     
         with pd.ExcelWriter(output_file2, engine='openpyxl') as writer:
             # Write metadata
@@ -975,6 +1094,9 @@ class ExcelTransactionMatcher:
             
             # Apply alternating background colors to matched transaction blocks
             self._apply_alternating_background_colors(worksheet, file2_matched)
+            
+            # Format output file transaction blocks (make narration italic)
+            self._format_output_file_transaction_blocks(worksheet)
             
         
         # Also create a simple version without metadata to test (if enabled)
