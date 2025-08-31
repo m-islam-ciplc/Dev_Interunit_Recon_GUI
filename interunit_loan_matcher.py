@@ -50,8 +50,7 @@ class InterunitLoanMatcher:
             'MTBL-SND-A/C-1310000003858': 'MTBL#3858',
         }
         
-        # Small tolerance for floating point comparison
-        self.AMOUNT_TOLERANCE = 0.01
+        # No amount tolerance - exact matching required
         
         # Initialize transaction block identifier
         self.block_identifier = TransactionBlockIdentifier()
@@ -149,11 +148,11 @@ class InterunitLoanMatcher:
                     ((block1['amounts']['debit'] and block2['amounts']['credit']) or
                      (block1['amounts']['credit'] and block2['amounts']['debit']))):
                     
-                    # Check if amounts match exactly
+                    # Check if amounts match exactly (NO TOLERANCE)
                     amount1 = block1['amounts']['debit'] if block1['amounts']['debit'] else block1['amounts']['credit']
                     amount2 = block2['amounts']['debit'] if block2['amounts']['debit'] else block2['amounts']['credit']
                     
-                    if abs(amount1 - amount2) <= self.AMOUNT_TOLERANCE:
+                    if amount1 == amount2:
                         # Check if "Entered By" names match
                         if (block1['entered_by'] and block2['entered_by'] and
                             block1['entered_by'] == block2['entered_by']):

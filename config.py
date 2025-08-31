@@ -12,14 +12,14 @@ LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
 PO_PATTERN = r'[A-Z]{3}/PO/\d{4}/\d{1,2}/\d{3,6}'
 
 # Amount matching tolerance (for rounding differences)
-AMOUNT_TOLERANCE = 0.01  # Set to 0 for exact matching, or higher for tolerance
+# AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
 
 # File paths and output settings
-# INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
-# INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
+INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
+INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
 
-INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
-INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
+# INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
+# INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
 
 # INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
 # INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"
@@ -45,7 +45,7 @@ def print_configuration():
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
     print(f"PO Pattern: {PO_PATTERN}")
-    print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")
+    # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
     print("=" * 60)
 
 def update_configuration():
@@ -60,4 +60,4 @@ def update_configuration():
     print("7. VERBOSE_DEBUG - Whether to show detailed debug output")
     print("8. LC_PATTERN - Regex pattern for LC number extraction")
     print("9. PO_PATTERN - Regex pattern for PO number extraction")
-    print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")
+    # print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed

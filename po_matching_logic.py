@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Configuration
-AMOUNT_TOLERANCE = 0.01  # Amount matching tolerance for rounding differences
+# AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
 
 class POMatchingLogic:
     """Handles the logic for finding PO number matches between two files."""

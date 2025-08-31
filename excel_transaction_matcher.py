@@ -23,7 +23,8 @@ from config import (
     SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, 
     # CREATE_ALT_FILES,  # ❌ UNUSED - commenting out
     VERBOSE_DEBUG,
-    LC_PATTERN, PO_PATTERN, AMOUNT_TOLERANCE
+    LC_PATTERN, PO_PATTERN
+    # AMOUNT_TOLERANCE  # ❌ UNUSED - removed since all matching uses exact amounts
 )
 
 def print_configuration():
@@ -39,7 +40,7 @@ def print_configuration():
     # print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")  # ❌ UNUSED - commenting out
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
-    print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")
+    # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
     print("=" * 60)
 
 def update_configuration():
@@ -54,7 +55,7 @@ def update_configuration():
     # print("7. CREATE_ALT_FILES - Whether to create alternative files")  # ❌ UNUSED - commenting out
     print("8. VERBOSE_DEBUG - Whether to show detailed debug output")
     print("9. LC_PATTERN - Regex pattern for LC number extraction")
-    print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")
+    # print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
 
 class   ExcelTransactionMatcher:
     """
