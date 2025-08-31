@@ -10,6 +10,8 @@ from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
 from po_matching_logic import POMatchingLogic
+
+from interunit_loan_matcher import InterunitLoanMatcher
 from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
@@ -66,6 +68,8 @@ class ExcelTransactionMatcher:
         self.transactions2 = None
         self.lc_matching_logic = LCMatchingLogic()
         self.po_matching_logic = POMatchingLogic()
+
+        self.interunit_loan_matcher = InterunitLoanMatcher()
         self.block_identifier = TransactionBlockIdentifier()
         
     def read_complex_excel(self, file_path: str):
@@ -393,6 +397,11 @@ class ExcelTransactionMatcher:
         po_numbers1 = self.extract_po_numbers_from_narration(self.file1_path)
         po_numbers2 = self.extract_po_numbers_from_narration(self.file2_path)
         
+        # Extract interunit account references from narration rows (italic Column C) using formatting
+        print("Extracting interunit account references from narration rows using formatting...")
+        interunit_accounts1 = self.interunit_loan_matcher.extract_interunit_accounts_from_narration(self.transactions1, self.file1_path)
+        interunit_accounts2 = self.interunit_loan_matcher.extract_interunit_accounts_from_narration(self.transactions2, self.file2_path)
+        
         # Identify transaction blocks using formatting
         print("Identifying transaction blocks using formatting...")
         blocks1 = self.block_identifier.identify_transaction_blocks(self.transactions1, self.file1_path)
@@ -401,11 +410,11 @@ class ExcelTransactionMatcher:
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
         
-        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2
+        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2
     
     def find_potential_matches(self):
-        """Find potential LC and PO number matches between the two files (sequential approach)."""
-        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2 = self.process_files()
+        """Find potential LC, PO, and Interunit number matches between the two files (sequential approach)."""
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2 = self.process_files()
         
         print("\n" + "="*60)
         print("STEP 1: LC MATCHING")
@@ -462,10 +471,51 @@ class ExcelTransactionMatcher:
             shared_existing_matches, shared_match_counter
         )
         
+        # Update the shared counter after PO matching
+        if po_matches:
+            shared_match_counter = max(int(match['match_id'][1:]) for match in po_matches)
+        
         print(f"\nPO Matching Results: {len(po_matches)} matches found")
         
+        # Step 3: Find Interunit Loan matches on UNMATCHED records
+        print("\n" + "="*60)
+        print("STEP 3: INTERUNIT LOAN MATCHING (ON UNMATCHED RECORDS)")
+        print("="*60)
+        
+        # Create masks for unmatched records (after LC and PO matching)
+        lc_po_matched_indices1 = set()
+        lc_po_matched_indices2 = set()
+        
+        for match in lc_matches + po_matches:
+            lc_po_matched_indices1.add(match['File1_Index'])
+            lc_po_matched_indices2.add(match['File2_Index'])
+        
+        # Filter interunit accounts to only unmatched records
+        interunit_accounts1_unmatched = interunit_accounts1.copy()
+        interunit_accounts2_unmatched = interunit_accounts2.copy()
+        
+        # Mark matched records as None in interunit accounts
+        for idx in lc_po_matched_indices1:
+            if idx < len(interunit_accounts1_unmatched):
+                interunit_accounts1_unmatched.iloc[idx] = None
+        
+        for idx in lc_po_matched_indices2:
+            if idx < len(interunit_accounts2_unmatched):
+                interunit_accounts2_unmatched.iloc[idx] = None
+        
+        print(f"File 1: {len(interunit_accounts1_unmatched[interunit_accounts1_unmatched.notna()])} unmatched interunit accounts")
+        print(f"File 2: {len(interunit_accounts2_unmatched[interunit_accounts2_unmatched.notna()])} unmatched interunit accounts")
+        
+        # Find interunit loan matches on unmatched records with shared state
+        interunit_matches = self.interunit_loan_matcher.find_potential_matches(
+            transactions1, transactions2, interunit_accounts1_unmatched, interunit_accounts2_unmatched,
+            self.file1_path, self.file2_path, shared_existing_matches, shared_match_counter
+        )
+        
+        print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
+        
         # Combine all matches
-        all_matches = lc_matches + po_matches
+        all_matches = lc_matches + po_matches + interunit_matches
         
         print(f"\n" + "="*60)
         print("FINAL RESULTS")
@@ -473,6 +523,7 @@ class ExcelTransactionMatcher:
         print(f"Total Matches: {len(all_matches)}")
         print(f"  - LC Matches: {len(lc_matches)}")
         print(f"  - PO Matches: {len(po_matches)}")
+        print(f"  - Interunit Loan Matches: {len(interunit_matches)}")
         
         return all_matches
     
@@ -521,21 +572,24 @@ class ExcelTransactionMatcher:
 
     
     def create_audit_info(self, match):
-        """Create audit info in clean, readable plaintext format for both LC and PO matches."""
-        # Use the validated amounts from the matching process
-        lender_amount = match['File1_Amount'] if match['File1_Type'] == 'Lender' else match['File2_Amount']
-        borrower_amount = match['File1_Amount'] if match['File1_Type'] == 'Borrower' else match['File2_Amount']
-        
+        """Create audit info in clean, readable plaintext format for LC, PO, and Interunit matches."""
         # Determine match type and create appropriate audit info
         if 'LC_Number' in match and match['LC_Number']:
-            # This is an LC match
-            audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+            # This is an LC match - use File1_Amount or File2_Amount
+            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+            audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         elif 'PO_Number' in match and match['PO_Number']:
-            # This is a PO match
-            audit_info = f"PO Match: {match['PO_Number']}\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+            # This is a PO match - use File1_Amount or File2_Amount
+            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+            audit_info = f"PO Match: {match['PO_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+        elif 'Interunit_Account' in match and match['Interunit_Account']:
+            # This is an Interunit Loan match - use File1_Amount or File2_Amount
+            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+            audit_info = f"Interunit Loan Match: {match['Interunit_Account']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         else:
             # Fallback for unknown match type
-            audit_info = f"Unknown Match Type\nLender Amount: {lender_amount:.2f}\nBorrower Amount: {borrower_amount:.2f}"
+            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+            audit_info = f"Unknown Match Type\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         
         return audit_info
     
@@ -707,6 +761,9 @@ class ExcelTransactionMatcher:
             elif 'PO_Number' in match and match['PO_Number']:
                 print(f"  PO Number: {match['PO_Number']}")
                 match_type = 'PO'
+            elif 'Interunit_Account' in match and match['Interunit_Account']:
+                print(f"  Interunit Account: {match['Interunit_Account']}")
+                match_type = 'Interunit'
             else:
                 print(f"  Unknown Match Type")
                 match_type = 'Unknown'
