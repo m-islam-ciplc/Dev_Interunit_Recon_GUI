@@ -15,8 +15,15 @@ PO_PATTERN = r'[A-Z]{3}/PO/\d{4}/\d{1,2}/\d{3,6}'
 AMOUNT_TOLERANCE = 0.01  # Set to 0 for exact matching, or higher for tolerance
 
 # File paths and output settings
-INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
-INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
+# INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
+# INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
+
+INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
+INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
+
+# INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
+# INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"
+
 OUTPUT_FOLDER = "Output"
 OUTPUT_SUFFIX = "_MATCHED.xlsx"
 SIMPLE_SUFFIX = "_SIMPLE.xlsx"

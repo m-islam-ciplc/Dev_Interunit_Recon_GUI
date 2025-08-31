@@ -40,6 +40,7 @@ class InterunitLoanMatcher:
             'Eastern Bank,STD-1011220144056': 'EBL#4056',
             'Midland Bank Ltd-CE-0011-1060000313': 'MDB#0313',
             'Midland Bank PLC-CD-A/C-0011-1050011026': 'MDB#11026',
+            'Midland-CE-0011-1060000304-CI': 'MDB#0304',
             'Midland-CE-0011-1060000331-CI': 'MDB#0331',
             'One Bank-CD/A/C-0011020008826': 'OBL#8826',
             'One Bank-SND-A/C-0013000002451': 'OBL#2451',
