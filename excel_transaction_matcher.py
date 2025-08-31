@@ -1,8 +1,8 @@
 import pandas as pd
-import numpy as np
+# import numpy as np  # ❌ UNUSED - commenting out
 import re
 from typing import List, Dict, Any, Tuple
-import logging
+# import logging  # ❌ UNUSED - commenting out
 import os
 import sys
 import argparse
@@ -20,7 +20,9 @@ from transaction_block_identifier import TransactionBlockIdentifier
 # Import configuration from dedicated config module
 from config import (
     INPUT_FILE1_PATH, INPUT_FILE2_PATH, OUTPUT_FOLDER, OUTPUT_SUFFIX,
-    SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, CREATE_ALT_FILES, VERBOSE_DEBUG,
+    SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, 
+    # CREATE_ALT_FILES,  # ❌ UNUSED - commenting out
+    VERBOSE_DEBUG,
     LC_PATTERN, PO_PATTERN, AMOUNT_TOLERANCE
 )
 
@@ -34,7 +36,7 @@ def print_configuration():
     print(f"Output Folder: {OUTPUT_FOLDER}")
     print(f"Output Suffix: {OUTPUT_SUFFIX}")
     print(f"Simple Files: {'Yes' if CREATE_SIMPLE_FILES else 'No'}")
-    print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")
+    # print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")  # ❌ UNUSED - commenting out
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
     print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")
@@ -49,7 +51,7 @@ def update_configuration():
     print("4. OUTPUT_SUFFIX - Suffix for matched files")
     print("5. SIMPLE_SUFFIX - Suffix for simple test files")
     print("6. CREATE_SIMPLE_FILES - Whether to create simple test files")
-    print("7. CREATE_ALT_FILES - Whether to create alternative files")
+    # print("7. CREATE_ALT_FILES - Whether to create alternative files")  # ❌ UNUSED - commenting out
     print("8. VERBOSE_DEBUG - Whether to show detailed debug output")
     print("9. LC_PATTERN - Regex pattern for LC number extraction")
     print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")
@@ -71,6 +73,10 @@ class ExcelTransactionMatcher:
 
         self.interunit_loan_matcher = InterunitLoanMatcher()
         self.block_identifier = TransactionBlockIdentifier()
+        
+        # ❌ UNUSED INSTANCE VARIABLES - commenting out
+        # self.lc_parent_mapping = None
+        # self.po_parent_mapping = None
         
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
@@ -120,50 +126,51 @@ class ExcelTransactionMatcher:
         
         return description_series.apply(extract_single_po)
     
-    def extract_lc_numbers_with_validation(self, description_series, transactions_df):
-        """Extract LC numbers and link them to parent transaction rows."""
-        lc_numbers = []
-        lc_parent_rows = []  # Track which parent row each LC belongs to
-        
-        for idx, description in enumerate(description_series):
-            # Check if this row has valid transaction data
-            row = transactions_df.iloc[idx]
-            
-            # Valid transaction row should have:
-            # 1. A date (not nan)
-            # 2. Either Debit or Credit amount (not both nan)
-            has_date = pd.notna(row.iloc[0])  # Date column
-            has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
-            has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
-            
-            if has_date and (has_debit or has_credit):
-                # This is a valid transaction row
-                # Check if it has an LC number
-                lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
-                lc_numbers.append(lc)
-                lc_parent_rows.append(idx)  # This row is its own parent
-            else:
-                # This might be a description row
-                lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
-                if lc is not None:
-                    # Found LC in description row, need to find parent transaction row
-                    parent_row = self.find_parent_transaction_row(idx, transactions_df)
-                    if parent_row is not None:
-                        print(f"DEBUG: LC {lc} at row {idx} linked to parent row {parent_row}")
-                        lc_numbers.append(lc)
-                        lc_parent_rows.append(parent_row)
-                    else:
-                        print(f"DEBUG: LC {lc} at row {idx} - NO PARENT FOUND!")
-                        lc_numbers.append(None)
-                        lc_parent_rows.append(None)
-                else:
-                    lc_numbers.append(None)
-                    lc_parent_rows.append(None)
-        
-        # Store parent row mapping for later use
-        self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
-        
-        return pd.Series(lc_numbers)
+    # ❌ UNUSED METHOD - commenting out
+    # def extract_lc_numbers_with_validation(self, description_series, transactions_df):
+    #     """Extract LC numbers and link them to parent transaction rows."""
+    #     lc_numbers = []
+    #     lc_parent_rows = []  # Track which parent row each LC belongs to
+    #     
+    #     for idx, description in enumerate(description_series):
+    #         # Check if this row has valid transaction data
+    #         row = transactions_df.iloc[idx]
+    #         
+    #         # Valid transaction row should have:
+    #         # 1. A date (not nan)
+    #         # 2. Either Debit or Credit amount (not both nan)
+    #         has_date = pd.notna(row.iloc[0])  # Date column
+    #         has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
+    #         has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
+    #         
+    #         if has_date and (has_debit or has_credit):
+    #             # This is a valid transaction row
+    #             # Check if it has an LC number
+    #             lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
+    #             lc_numbers.append(lc)
+    #                 lc_parent_rows.append(idx)  # This row is its own parent
+    #         else:
+    #             # This might be a description row
+    #             lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
+    #             if lc is not None:
+    #                     # Found LC in description row, need to find parent transaction row
+    #                     parent_row = self.find_parent_transaction_row(idx, transactions_df)
+    #                     if parent_row is not None:
+    #                         print(f"DEBUG: LC {lc} at row {idx} linked to parent row {parent_row}")
+    #                         lc_numbers.append(lc)
+    #                         lc_parent_rows.append(parent_row)
+    #                     else:
+    #                         print(f"DEBUG: LC {lc} at row {idx} - NO PARENT FOUND!")
+    #                         lc_numbers.append(None)
+    #                         lc_parent_rows.append(None)
+    #                 else:
+    #                     lc_numbers.append(None)
+    #                         lc_parent_rows.append(None)
+    #         
+    #         # Store parent row mapping for later use
+    #         self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
+    #         
+    #         return pd.Series(lc_numbers)
     
     def extract_lc_numbers_from_narration(self, file_path):
         """Extract LC numbers from narration rows (regular text Column C - not bold, not italic) using openpyxl formatting."""
@@ -210,7 +217,7 @@ class ExcelTransactionMatcher:
         wb.close()
         
         # Store parent row mapping for later use
-        self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
+        # self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))  # ❌ UNUSED - commenting out
         
         return pd.Series(lc_numbers)
     
@@ -268,105 +275,108 @@ class ExcelTransactionMatcher:
         wb.close()
         
         # Store parent row mapping for later use
-        self.po_parent_mapping = dict(zip(range(len(po_numbers)), po_parent_rows))
+        # self.po_parent_mapping = dict(zip(range(len(po_numbers)), po_parent_rows))  # ❌ UNUSED - commenting out
         
         return pd.Series(po_numbers)
     
-    def find_parent_transaction_row(self, current_row, transactions_df):
-        """Find the parent transaction row for a description row."""
-        # Look backwards from current row to find the most recent transaction row
-        for row_idx in range(current_row - 1, -1, -1):  # Start from current_row - 1, not current_row
-            row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Date column
-            has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
-            has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
-            
-            if has_date and (has_debit or has_credit):
-                return row_idx
-        
-        # If no parent found looking backwards, look forwards
-        for row_idx in range(current_row + 1, len(transactions_df)):
-            row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Date column
-            has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
-            has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
-            
-            if has_date and (has_debit or has_credit):
-                return row_idx
-        
-        return None
+    # ❌ UNUSED METHOD - commenting out
+    # def find_parent_transaction_row(self, current_row, transactions_df):
+    #     """Find the parent transaction row for a description row."""
+    #     # Look backwards from current row to find the most recent transaction row
+    #     for row_idx in range(current_row - 1, -1, -1):  # Start from current_row - 1, not current_row
+    #         row = transactions_df.iloc[row_idx]
+    #         has_date = pd.notna(row.iloc[0])  # Date column
+    #         has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
+    #         has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
+    #             
+    #         if has_date and (has_debit or has_credit):
+    #             return row_idx
+    #     
+    #     # If no parent found looking backwards, look forwards
+    #     for row_idx in range(current_row + 1, len(transactions_df)):
+    #         row = transactions_df.iloc[row_idx]
+    #         has_date = pd.notna(row.iloc[0])  # Date column
+    #         has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
+    #         has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
+    #             
+    #         if has_date and (has_debit or has_credit):
+    #             return row_idx
+    #     
+    #     return None
     
-    def identify_transaction_blocks(self, transactions_df):
-        """Identify transaction blocks based on date+Dr/Cr start and next date+Dr/Cr end."""
-        blocks = []
-        current_block = []
-        in_block = False
-        
-        for idx, row in transactions_df.iterrows():
-            # Check if row has date in Col A and Dr/Cr in Col B (block start/end)
-            has_date = pd.notna(row.iloc[0])  # Col A (Date)
-            has_dr_cr = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
-            
-            # Check if this is a new block start (date + Dr/Cr)
-            is_new_block_start = has_date and has_dr_cr
-            
-            if is_new_block_start:
-                # If we're already in a block, end the current one
-                if in_block and current_block:
-                    blocks.append(current_block)
-                
-                # Start new block
-                current_block = [row]
-                in_block = True
-            elif in_block:
-                # Continue adding rows to current block
-                current_block.append(row)
-        
-        # Add the last block if it exists
-        if current_block:
-            blocks.append(current_block)
-        
-        return blocks
+    # ❌ UNUSED METHOD - commenting out
+    # def identify_transaction_blocks(self, transactions_df):
+    #     """Identify transaction blocks based on date+Dr/Cr start and next date+Dr/Cr end."""
+    #     blocks = []
+    #     current_block = []
+    #     in_block = False
+    #     
+    #     for idx, row in transactions_df.iterrows():
+    #         # Check if row has date in Col A and Dr/Cr in Col B (block start/end)
+    #         has_date = pd.notna(row.iloc[0])  # Col A (Date)
+    #         has_dr_cr = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
+    #         
+    #         # Check if this is a new block start (date + Dr/Cr)
+    #         is_new_block_start = has_date and has_dr_cr
+    #         
+    #         if is_new_block_start:
+    #             # If we're already in a block, end the current one
+    #             if in_block and current_block:
+    #                 blocks.append(current_block)
+    #             
+    #             # Start new block
+    #             current_block = [row]
+    #                 in_block = True
+    #         elif in_block:
+    #             # Continue adding rows to current block
+    #             current_block.append(row)
+    #     
+    #         # Add the last block if it exists
+    #         if current_block:
+    #             blocks.append(current_block)
+    #     
+    #         return blocks
     
-    def identify_transaction_blocks_with_formatting(self, file_path):
-        """Identify transaction blocks using openpyxl to check bold formatting in Column C."""
-        blocks = []
-        
-        # Load workbook with openpyxl to access formatting
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        
-        current_block = []
-        in_block = False
-        
-        for row in range(9, ws.max_row + 1):  # Start from row 9 (after headers)
-            date_cell = ws.cell(row=row, column=1)
-            particulars_cell = ws.cell(row=row, column=2)
-            desc_cell = ws.cell(row=row, column=3)
-            
-            # Check if this is a transaction block header (Date + Dr/Cr + BOLD Col C)
-            has_date = date_cell.value is not None
-            has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
-            has_bold_desc = desc_cell.font and desc_cell.font.bold
-            
-            if has_date and has_dr_cr and has_bold_desc:
-                # If we're already in a block, end the current one
-                if in_block and current_block:
-                    blocks.append(current_block)
-                
-                # Start new block
-                current_block = [row]
-                in_block = True
-            elif in_block:
-                # Continue adding rows to current block
-                current_block.append(row)
-        
-        # Add the last block if it exists
-        if current_block:
-            blocks.append(current_block)
-        
-        wb.close()
-        return blocks
+    # ❌ UNUSED METHOD - commenting out
+    # def identify_transaction_blocks_with_formatting(self, file_path):
+    #     """Identify transaction blocks using openpyxl to check bold formatting in Column C."""
+    #     blocks = []
+    #     
+    #     # Load workbook with openpyxl to access formatting
+    #     wb = openpyxl.load_workbook(file_path)
+    #     ws = wb.active
+    #     
+    #     current_block = []
+    #     in_block = False
+    #     
+    #     for row in range(9, ws.max_row + 1):  # Start from row 9 (after headers)
+    #         date_cell = ws.cell(row=row, column=1)
+    #         particulars_cell = ws.cell(row=row, column=2)
+    #         desc_cell = ws.cell(row=row, column=3)
+    #         
+    #         # Check if this is a transaction block header (Date + Dr/Cr + BOLD Col C)
+    #         has_date = date_cell.value is not None
+    #         has_dr_cr = particulars_cell.value and str(particulars_cell.value).strip() in ['Dr', 'Cr']
+    #         has_bold_desc = desc_cell.font and desc_cell.font.bold
+    #             
+    #         if has_date and has_dr_cr and has_bold_desc:
+    #             # If we're already in a block, end the current one
+    #             if in_block and current_block:
+    #                 blocks.append(current_block)
+    #             
+    #             # Start new block
+    #                 current_block = [row]
+    #                 in_block = True
+    #         elif in_block:
+    #             # Continue adding rows to current block
+    #                 current_block.append(row)
+    #     
+    #         # Add the last block if it exists
+    #         if current_block:
+    #             blocks.append(current_block)
+    #     
+    #         wb.close()
+    #         return blocks
     
     def process_files(self):
         """Process both files and prepare for matching."""
@@ -527,27 +537,28 @@ class ExcelTransactionMatcher:
         
         return all_matches
     
-    def find_transaction_block_header(self, current_row, transactions_df):
-        """Find the transaction block header row (with date and particulars) for a given row."""
-        # Look backwards from current row to find the most recent block header
-        for row_idx in range(current_row, -1, -1):
-            row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Col A (Date)
-            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
-            
-            if has_date and has_particulars:
-                return row_idx
-        
-        # If no header found looking backwards, look forwards
-        for row_idx in range(current_row + 1, len(transactions_df)):
-            row = transactions_df.iloc[row_idx]
-            has_date = pd.notna(row.iloc[0])  # Col A (Date)
-            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
-            
-            if has_date and has_particulars:
-                return row_idx
-        
-        return current_row  # Fallback to current row if no header found
+    # ❌ UNUSED METHOD - commenting out
+    # def find_transaction_block_header(self, current_row, transactions_df):
+    #     """Find the transaction block header row (with date and particulars) for a given row."""
+    #     # Look backwards from current row to find the most recent block header
+    #     for row_idx in range(current_row, -1, -1):
+    #         row = transactions_df.iloc[row_idx]
+    #         has_date = pd.notna(row.iloc[0])  # Col A (Date)
+    #         has_particulars = pd.notna(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
+    #             
+    #         if has_date and has_particulars:
+    #             return row_idx
+    #     
+    #     # If no header found looking backwards, look forwards
+    #     for row_idx in range(current_row + 1, len(transactions_df)):
+    #         row = transactions_df.iloc[row_idx]
+    #         has_date = pd.notna(row.iloc[0])  # Col A (Date)
+    #         has_particulars = pd.notna(row.iloc[1]).strip() in ['Dr', 'Cr']  # Col B (Particulars)
+    #             
+    #         if has_date and has_particulars:
+    #             return row_idx
+    #     
+    #         return current_row  # Fallback to current row if no header found
     
     def find_parent_transaction_row_with_formatting(self, ws, current_row):
         """Find the parent transaction row for a narration row using openpyxl formatting."""

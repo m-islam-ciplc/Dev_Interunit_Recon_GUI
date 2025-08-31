@@ -7,7 +7,8 @@ class LCMatchingLogic:
     """Handles the logic for finding LC number matches between two files."""
     
     def __init__(self):
-        self.amount_tolerance = AMOUNT_TOLERANCE
+        # self.amount_tolerance = AMOUNT_TOLERANCE  # ❌ UNUSED - commenting out
+        pass
     
     def find_potential_matches(self, transactions1, transactions2, lc_numbers1, lc_numbers2, existing_matches=None, match_counter=0):
         """Find potential LC number matches between the two files."""
@@ -210,7 +211,8 @@ class LCMatchingLogic:
         
         return "Unknown"
     
-    def set_amount_tolerance(self, tolerance):
-        """Set the amount tolerance for matching."""
-        self.amount_tolerance = tolerance
-        print(f"Amount tolerance set to: {self.amount_tolerance}")
+    # ❌ UNUSED METHOD - commenting out
+    # def set_amount_tolerance(self, tolerance):
+    #     """Set the amount tolerance for matching."""
+    #     self.amount_tolerance = tolerance
+    #     print(f"Amount tolerance set to: {self.amount_tolerance}")
