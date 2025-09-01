@@ -7,9 +7,8 @@ This module implements the CORRECT interunit loan matching logic:
 2. Find the short code in narration (of both files)
 3. Debit/Credit amounts must match exactly (no tolerance)
 4. Cross-referenced short codes: File 1 narration contains File 2's short code, and File 2 narration contains File 1's short code
-5. "Entered By" names must match
-6. Accounts must be different (lender vs borrower)
-7. FOLLOWS CORE LOGIC AND FORMAT - cannot deviate
+5. Accounts must be different (lender vs borrower)
+6. FOLLOWS CORE LOGIC AND FORMAT - cannot deviate
 """
 
 import pandas as pd
@@ -97,9 +96,8 @@ class InterunitLoanMatcher:
         print(f"2. Find the short code in narration (of both files)")
         print(f"3. Debit/Credit amounts must match exactly (no tolerance)")
         print(f"4. Cross-referenced short codes: File 1 narration contains File 2's short code, and File 2 narration contains File 1's short code")
-        print(f"5. 'Entered By' names must match")
-        print(f"6. Accounts must be different (lender vs borrower)")
-        print(f"7. FOLLOWS CORE LOGIC: Uses universal M001 format, shared state, same structure")
+        print(f"5. Accounts must be different (lender vs borrower)")
+        print(f"6. FOLLOWS CORE LOGIC: Uses universal M001 format, shared state, same structure")
         
         # Identify transaction blocks in both files
         blocks1 = self.block_identifier.identify_transaction_blocks(transactions1, file1_path)
@@ -153,71 +151,65 @@ class InterunitLoanMatcher:
                     amount2 = block2['amounts']['debit'] if block2['amounts']['debit'] else block2['amounts']['credit']
                     
                     if amount1 == amount2:
-                        # Check if "Entered By" names match
-                        if (block1['entered_by'] and block2['entered_by'] and
-                            block1['entered_by'] == block2['entered_by']):
-                            
-                            # Check for cross-referenced short codes
-                            cross_reference_found = False
-                            file1_narration_contains = None
-                            file2_narration_contains = None
-                            
-                            # File 1's narration should contain File 2's short code
-                            for narration1 in block1['narration_short_codes']:
-                                for ledger2 in block2['ledger_accounts']:
-                                    if narration1['short_code'] == ledger2['short_code']:
-                                        cross_reference_found = True
-                                        file1_narration_contains = narration1['short_code']
-                                        break
-                                if cross_reference_found:
+                        # Check for cross-referenced short codes
+                        cross_reference_found = False
+                        file1_narration_contains = None
+                        file2_narration_contains = None
+                        
+                        # File 1's narration should contain File 2's short code
+                        for narration1 in block1['narration_short_codes']:
+                            for ledger2 in block2['ledger_accounts']:
+                                if narration1['short_code'] == ledger2['short_code']:
+                                    cross_reference_found = True
+                                    file1_narration_contains = narration1['short_code']
                                     break
-                            
-                            # File 2's narration should contain File 1's short code
                             if cross_reference_found:
-                                for narration2 in block2['narration_short_codes']:
-                                    for ledger1 in block1['ledger_accounts']:
-                                        if narration2['short_code'] == ledger1['short_code']:
-                                            file2_narration_contains = narration2['short_code']
-                                            
-                                            # We have a match! Check if we've already matched this combination
-                                            match_key = (amount1, block1['entered_by'], file1_narration_contains, file2_narration_contains)
-                                            
-                                            if match_key in existing_matches:
-                                                # Use existing match ID for consistency
-                                                match_id = existing_matches[match_key]
-                                                print(f"  REUSING existing Match ID {match_id} for Amount {amount1}, Entered By {block1['entered_by']}")
-                                            else:
-                                                # Create new match ID following CORE FORMAT
-                                                match_counter += 1
-                                                match_id = f"M{match_counter:03d}"  # M001, M002, M003... FOLLOWS CORE LOGIC
-                                                existing_matches[match_key] = match_id
-                                                print(f"  CREATING new Match ID {match_id} for Amount {amount1}, Entered By {block1['entered_by']}")
-                                            
-                                            # Create match following CORE FORMAT exactly
-                                            match = {
-                                                'match_id': match_id,
-                                                'Interunit_Account': f"{file1_narration_contains} ↔ {file2_narration_contains}",
-                                                'File1_Index': block1['amounts']['row'],
-                                                'File2_Index': block2['amounts']['row'],
-                                                'File1_Debit': block1['amounts']['debit'],
-                                                'File1_Credit': block1['amounts']['credit'],
-                                                'File2_Debit': block2['amounts']['debit'],
-                                                'File2_Credit': block2['amounts']['credit'],
-                                                'File1_Amount': amount1,  # Add File1_Amount for audit info
-                                                'File2_Amount': amount1,  # Add File2_Amount for audit info
-                                                'Amount': amount1,
-                                                'Entered_By': block1['entered_by']
-                                            }
-                                            
-                                            matches.append(match)
-                                            print(f"  ✓ MATCH {match_id}: Amount {amount1}, Entered By {block1['entered_by']}")
-                                            print(f"    Cross-reference: File 1 narration contains {file1_narration_contains}")
-                                            print(f"    Cross-reference: File 2 narration contains {file2_narration_contains}")
-                                            break
-                                    
-                                    if file2_narration_contains:
+                                break
+                        
+                        # File 2's narration should contain File 1's short code
+                        if cross_reference_found:
+                            for narration2 in block2['narration_short_codes']:
+                                for ledger1 in block1['ledger_accounts']:
+                                    if narration2['short_code'] == ledger1['short_code']:
+                                        file2_narration_contains = narration2['short_code']
+                                        
+                                        # We have a match! Check if we've already matched this combination
+                                        match_key = (amount1, file1_narration_contains, file2_narration_contains)
+                                        
+                                        if match_key in existing_matches:
+                                            # Use existing match ID for consistency
+                                            match_id = existing_matches[match_key]
+                                            print(f"  REUSING existing Match ID {match_id} for Amount {amount1}")
+                                        else:
+                                            # Create new match ID following CORE FORMAT
+                                            match_counter += 1
+                                            match_id = f"M{match_counter:03d}"  # M001, M002, M003... FOLLOWS CORE LOGIC
+                                            existing_matches[match_key] = match_id
+                                            print(f"  CREATING new Match ID {match_id} for Amount {amount1}")
+                                        
+                                        # Create match following CORE FORMAT exactly
+                                        match = {
+                                            'match_id': match_id,
+                                            'Interunit_Account': f"{file1_narration_contains} ↔ {file2_narration_contains}",
+                                            'File1_Index': block1['amounts']['row'],
+                                            'File2_Index': block2['amounts']['row'],
+                                            'File1_Debit': block1['amounts']['debit'],
+                                            'File1_Credit': block1['amounts']['credit'],
+                                            'File2_Debit': block2['amounts']['debit'],
+                                            'File2_Credit': block2['amounts']['credit'],
+                                            'File1_Amount': amount1,  # Add File1_Amount for audit info
+                                            'File2_Amount': amount1,  # Add File2_Amount for audit info
+                                            'Amount': amount1
+                                        }
+                                        
+                                        matches.append(match)
+                                        print(f"  ✓ MATCH {match_id}: Amount {amount1}")
+                                        print(f"    Cross-reference: File 1 narration contains {file1_narration_contains}")
+                                        print(f"    Cross-reference: File 2 narration contains {file2_narration_contains}")
                                         break
-                            break
+                                
+                                if file2_narration_contains:
+                                    break
         
         # Close workbooks
         wb1.close()
@@ -234,8 +226,7 @@ class InterunitLoanMatcher:
             'block_rows': block_rows,
             'ledger_accounts': [],
             'narration_short_codes': [],
-            'amounts': {},
-            'entered_by': None
+            'amounts': {}
         }
         
         # Check each row in the block
@@ -286,17 +277,7 @@ class InterunitLoanMatcher:
                         'row': row_idx
                     }
                 
-                # Check for "Entered By" name
-                cell_b = worksheet.cell(row=excel_row, column=2)  # Column B
-                if (cell_b.value and 
-                    isinstance(cell_b.value, str) and 
-                    "Entered By :" in cell_b.value):
-                    
-                    if (cell_c.value and 
-                        cell_c.font and 
-                        cell_c.font.bold and 
-                        cell_c.font.italic):
-                        block_data['entered_by'] = str(cell_c.value).strip()
+
         
         return block_data
     

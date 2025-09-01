@@ -112,6 +112,6 @@ This logic ensures that:
 - **LC Numbers** are extracted ONLY from narration cells (regular text - not bold, not italic)
 - **Amounts** are found in Columns H & I (Debit/Credit)
 - **Transaction types** are determined by which column has the amount
-- **Matching requires ALL criteria**: Amount + Transaction Type + Entered By + LC Number
+- **Matching requires ALL criteria**: Amount + Transaction Type + LC Number
 - **Vch Type and Vch No. must be present** in the first row of a transaction block
 - **Opening Balance rows are NOT transaction blocks** - they lack Vch Type, Vch No., and "Entered By :"

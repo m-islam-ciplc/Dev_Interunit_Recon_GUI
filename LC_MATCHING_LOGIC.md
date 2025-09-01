@@ -17,12 +17,7 @@ The LC (Letter of Credit) matching logic is implemented in the `LCMatchingLogic`
 - **OR** **File 1** must be **Borrower** (has Credit amount) while **File 2** must be **Lender** (has Debit amount)
 - **Both files cannot be the same type** (both Lender or both Borrower)
 
-### 3. **"Entered By" Name Matching** (Exact Match)
-- The person who entered the transaction must be **exactly the same** in both files
-- **Column Mapping**: Column C (DataFrame index 2) in the row containing "Entered By :"
-- **Format**: Bold + Italic text in Column C
-
-### 4. **LC Number Matching** (Exact Match)
+### 3. **LC Number Matching** (Exact Match)
 - LC numbers must **exactly match** between both files
 - **Extraction Source**: Only from **Narration rows** (italic text, not bold, in Column C)
 - **Format**: Regular expression pattern matching for LC number formats
@@ -33,13 +28,12 @@ The LC (Letter of Credit) matching logic is implemented in the `LCMatchingLogic`
 ```
 1. ✅ Amount Check: file1_amount == file2_amount
 2. ✅ Type Check: (file1_is_lender AND file2_is_borrower) OR (file1_is_borrower AND file2_is_lender)
-3. ✅ Entered By Check: file1_entered_by == file2_entered_by
-4. ✅ LC Number Check: lc1 == lc2
-5. ✅ Match ID Assignment: Create new or reuse existing
+3. ✅ LC Number Check: lc1 == lc2
+4. ✅ Match ID Assignment: Create new or reuse existing
 ```
 
 ### **Match ID Generation Logic**
-- **Match Key**: `(LC_Number, Amount, Entered_By)`
+- **Match Key**: `(LC_Number, Amount)`
 - **Duplicate Prevention**: If the same combination exists, **reuse** the existing Match ID
 - **New Match ID**: If new combination, generate sequential ID (`M001`, `M002`, etc.)
 - **Consistency**: Identical transactions across multiple occurrences get the **same Match ID**
@@ -53,12 +47,7 @@ def find_transaction_block_header(self, description_row_idx, transactions_df):
     # Block start has: Date + Dr/Cr + Amount (Debit OR Credit)
 ```
 
-### **"Entered By" Name Extraction**
-```python
-def find_entered_by_name(self, block_header_idx, transactions_df):
-    # Look forward from block header to find "Entered By :" row
-    # Extract name from Column C (same row as "Entered By :")
-```
+
 
 ### **Amount and Type Determination**
 ```python
@@ -90,15 +79,14 @@ file1_amount = file1_debit if file1_is_lender else file1_credit
     'File1_Amount': 1000.00,               # File 1 transaction amount
     'File2_Amount': 1000.00,               # File 2 transaction amount
     'File1_Type': 'Lender',                # File 1 transaction type
-    'File2_Type': 'Borrower',              # File 2 transaction type
-    'Entered_By': 'sayeda'                 # Person who entered transaction
+    'File2_Type': 'Borrower'               # File 2 transaction type
 }
 ```
 
 ## Key Features
 
 ### **Duplicate Prevention**
-- **Same LC + Amount + Entered By** = **Same Match ID**
+- **Same LC + Amount** = **Same Match ID**
 - **No skipped Match IDs** in sequence
 - **Consistent identification** across multiple file runs
 
@@ -129,13 +117,11 @@ match_id = f"M{match_counter:03d}"  # M001, M002, M003, etc.
 
 ### **Missing Data Scenarios**
 - **No LC numbers found**: Returns empty matches list
-- **No "Entered By" found**: Uses "Unknown" as default
 - **No block header found**: Uses description row as fallback
 
 ### **Validation Failures**
 - **Amount mismatch**: Logs rejection with specific amounts
 - **Type mismatch**: Logs rejection with transaction types
-- **Name mismatch**: Logs rejection with both names
 - **LC mismatch**: Logs rejection with both LC numbers
 
 ## Usage Example
@@ -155,7 +141,7 @@ matches = matcher.find_potential_matches(
 # Process results
 print(f"Found {len(matches)} matches")
 for match in matches:
-    print(f"Match {match['match_id']}: {match['LC_Number']} - {match['Entered_By']}")
+    print(f"Match {match['match_id']}: {match['LC_Number']}")
 ```
 
 ## Summary
@@ -164,9 +150,8 @@ The LC matching logic provides a robust, multi-criteria approach to interunit tr
 
 1. **Exact amount matching** ensures financial accuracy
 2. **Transaction type opposition** validates interunit relationships
-3. **"Entered By" matching** ensures data integrity
-4. **LC number matching** provides transaction identification
-5. **Duplicate prevention** maintains consistency
-6. **Comprehensive logging** enables audit and debugging
+3. **LC number matching** provides transaction identification
+4. **Duplicate prevention** maintains consistency
+5. **Comprehensive logging** enables audit and debugging
 
 This system is designed for high-accuracy reconciliation with clear audit trails and consistent results across multiple executions.

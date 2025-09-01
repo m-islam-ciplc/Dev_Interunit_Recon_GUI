@@ -6,20 +6,24 @@
 # LC Number extraction pattern (modify if your LC numbers have different format)
 LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
 
-# PO Number extraction pattern (XXX/PO/YYYY/MM/NNNNNN format)
-# Month can be 1-12 (1 or 2 digits), PO number length varies
-# No start/end anchors since PO numbers are embedded in text
-PO_PATTERN = r'[A-Z]{3}/PO/\d{4}/\d{1,2}/\d{3,6}'
+# OLD PO Pattern (commented out - specific format matching)
+# PO_PATTERN = r'[A-Z0-9]{2,4}/PO/\d{4}/\d{1,2}/\d{3,6}'
+
+# NEW PO Pattern - Dynamic approach using /PO/ as anchor
+# Finds PO blocks that are continuous text with /PO/ in them
+# More flexible boundaries to catch PO numbers at sentence edges
+# Examples: CIL/C//PO//11/2024, CCEL/Reno//PO///2024/9/191024, G24/PO/2024/9/29505
+PO_PATTERN = r'(?:^|\s)([A-Z0-9/]+/PO/[A-Z0-9/]+)(?:\s|$|[,\.])'
 
 # Amount matching tolerance (for rounding differences)
 # AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
 
 # File paths and output settings
-INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
-INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
+# INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
+# INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
 
-# INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
-# INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
+INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
+INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
 
 # INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
 # INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"

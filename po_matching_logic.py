@@ -30,13 +30,12 @@ class POMatchingLogic:
         
         print(f"\n=== PO MATCHING LOGIC ===")
         print(f"1. Check if lender debit and borrower credit amounts are EXACTLY the same")
-        print(f"2. Check if 'Entered By' names are the same")
-        print(f"3. Check if PO numbers match between them")
-        print(f"4. Only if all three match: Assign same Match ID")
-        print(f"5. IMPORTANT: All transactions with same PO+Amount+EnteredBy get SAME Match ID")
+        print(f"2. Check if PO numbers match between them")
+        print(f"3. Only if both match: Assign same Match ID")
+        print(f"4. IMPORTANT: All transactions with same PO+Amount get SAME Match ID")
         
         # Use shared state for tracking which combinations have already been matched
-        # Key: (PO_Number, Amount, Entered_By), Value: match_id
+        # Key: (PO_Number, Amount), Value: match_id
         
         # Process each transaction in File 1 to find matches in File 2
         for idx1, po1 in enumerate(po_numbers1):
@@ -59,10 +58,6 @@ class POMatchingLogic:
             file1_amount = file1_debit if file1_is_lender else file1_credit
             
             print(f"  File 1: Amount={file1_amount}, Type={'Lender' if file1_is_lender else 'Borrower'}")
-            
-            # Find "Entered By" name for this transaction block in File 1
-            file1_entered_by = self.find_entered_by_name(block_header1, transactions1)
-            print(f"  File 1: Entered By = '{file1_entered_by}'")
             
             # Now look for matches in File 2
             for idx2, po2 in enumerate(po_numbers2):
@@ -100,26 +95,15 @@ class POMatchingLogic:
                 
                 print(f"      ✅ STEP 2 PASSED: Transaction types are opposite")
                 
-                # Find "Entered By" name for this transaction block in File 2
-                file2_entered_by = self.find_entered_by_name(block_header2, transactions2)
-                print(f"      File 2: Entered By = '{file2_entered_by}'")
-                
-                # STEP 3: Check if "Entered By" names are the same
-                if file1_entered_by != file2_entered_by:
-                    print(f"      ❌ REJECTED: Entered By names don't match ('{file1_entered_by}' vs '{file2_entered_by}')")
-                    continue
-                
-                print(f"      ✅ STEP 3 PASSED: Entered By names match")
-                
-                # STEP 4: Check if PO numbers match
+                # STEP 3: Check if PO numbers match
                 if po1 != po2:
                     print(f"      ❌ REJECTED: PO numbers don't match ('{po1}' vs '{po2}')")
                     continue
                 
-                print(f"      ✅ STEP 4 PASSED: PO numbers match")
+                print(f"      ✅ STEP 3 PASSED: PO numbers match")
                 
-                # STEP 5: Check if we already have a match for this combination
-                match_key = (po1, file1_amount, file1_entered_by)
+                # STEP 4: Check if we already have a match for this combination
+                match_key = (po1, file1_amount)
                 
                 if match_key in existing_matches:
                     # Use existing Match ID for consistency
@@ -151,8 +135,7 @@ class POMatchingLogic:
                     'File1_Amount': file1_amount,
                     'File2_Amount': file2_amount,
                     'File1_Type': 'Lender' if file1_is_lender else 'Borrower',
-                    'File2_Type': 'Lender' if file2_is_lender else 'Borrower',
-                    'Entered_By': file1_entered_by
+                    'File2_Type': 'Lender' if file2_is_lender else 'Borrower'
                 })
         
         print(f"\n=== PO MATCHING RESULTS ===")
@@ -166,7 +149,6 @@ class POMatchingLogic:
                 print(f"Match ID: {match['match_id']}")
                 print(f"PO Number: {match['PO_Number']}")
                 print(f"Amount: {match['File1_Amount']}")
-                print(f"Entered By: {match['Entered_By']}")
                 print(f"File 1: {match['File1_Date']} - {str(match['File1_Description'])[:50]}...")
                 print(f"  Type: {match['File1_Type']}, Debit: {match['File1_Debit']}, Credit: {match['File1_Credit']}")
                 print(f"File 2: {match['File2_Date']} - {str(match['File2_Description'])[:50]}...")
@@ -197,19 +179,7 @@ class POMatchingLogic:
         # If no header found, return the description row itself
         return description_row_idx
     
-    def find_entered_by_name(self, block_header_idx, transactions_df):
-        """Find the 'Entered By' name for a transaction block."""
-        # Look forward from the block header to find "Entered By :" row
-        for row_idx in range(block_header_idx, len(transactions_df)):
-            row = transactions_df.iloc[row_idx]
-            particulars = row.iloc[1]  # Column B (Particulars)
-            
-            if pd.notna(particulars) and str(particulars).strip() == 'Entered By :':
-                # Found "Entered By :", get the name from the SAME row, column 2
-                name = row.iloc[2]  # Column C (Description) - same row as "Entered By :"
-                return str(name).strip() if pd.notna(name) else "Unknown"
-        
-        return "Unknown"
+
     
     # ❌ UNUSED METHOD - commenting out
     # def set_amount_tolerance(self, tolerance):
