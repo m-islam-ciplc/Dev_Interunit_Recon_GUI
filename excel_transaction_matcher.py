@@ -11,7 +11,7 @@ import openpyxl
 from lc_matching_logic import LCMatchingLogic
 from po_matching_logic import POMatchingLogic
 
-from interunit_loan_matcher import InterunitLoanMatcher
+from interunit_loan_matching_logic import InterunitLoanMatcher
 from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
@@ -379,6 +379,132 @@ class   ExcelTransactionMatcher:
     #         wb.close()
     #         return blocks
     
+    def load_workbooks_and_extract_data(self):
+        """
+        Load Excel workbooks once and extract all required data in a single pass.
+        This optimization reduces file I/O operations from 4 to 1 per file.
+        """
+        print("Loading workbooks and extracting data...")
+        
+        # Load File 1 workbook once
+        wb1 = openpyxl.load_workbook(self.file1_path, data_only=True)
+        ws1 = wb1.active
+        
+        # Load File 2 workbook once  
+        wb2 = openpyxl.load_workbook(self.file2_path, data_only=True)
+        ws2 = wb2.active
+        
+        # Extract all data from File 1
+        lc_numbers1 = []
+        po_numbers1 = []
+        interunit_accounts1 = []
+        
+        # Process File 1 rows 9 onwards (same logic as individual methods)
+        for row in range(9, ws1.max_row + 1):
+            narration = ws1.cell(row=row, column=3).value  # Column C is narration
+            if narration:
+                # Extract LC numbers
+                lc_matches = re.findall(LC_PATTERN, str(narration).upper())
+                if lc_matches:
+                    lc_numbers1.append((row, lc_matches[0]))
+                
+                # Extract PO numbers
+                po_matches = re.findall(PO_PATTERN, str(narration).upper())
+                if po_matches:
+                    po_numbers1.append((row, po_matches[0]))
+                
+                # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
+                interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
+                if interunit_matches:
+                    interunit_accounts1.append((row, f"{interunit_matches[0][0]}#{interunit_matches[0][1]}"))
+        
+        # Convert to Series with proper indexing (matching original logic)
+        # Create Series with same length as transactions DataFrame, initialized with None
+        total_rows1 = len(self.transactions1)
+        lc_numbers1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
+        po_numbers1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
+        interunit_accounts1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
+        
+        # Now populate the found items at their correct DataFrame indices
+        for row, lc_num in lc_numbers1:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows1:
+                lc_numbers1_series.iloc[df_index] = lc_num
+        
+        for row, po_num in po_numbers1:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows1:
+                po_numbers1_series.iloc[df_index] = po_num
+        
+        for row, account in interunit_accounts1:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows1:
+                interunit_accounts1_series.iloc[df_index] = account
+        
+        # Extract all data from File 2
+        lc_numbers2 = []
+        po_numbers2 = []
+        interunit_accounts2 = []
+        
+        # Process File 2 rows 9 onwards
+        for row in range(9, ws2.max_row + 1):
+            narration = ws2.cell(row=row, column=3).value  # Column C is narration
+            if narration:
+                # Extract LC numbers
+                lc_matches = re.findall(LC_PATTERN, str(narration).upper())
+                if lc_matches:
+                    lc_numbers2.append((row, lc_matches[0]))
+                
+                # Extract PO numbers
+                po_matches = re.findall(PO_PATTERN, str(narration).upper())
+                if po_matches:
+                    po_numbers2.append((row, po_matches[0]))
+                
+                # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
+                interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
+                if interunit_matches:
+                    interunit_accounts2.append((row, f"{interunit_matches[0][0]}#{interunit_matches[0][1]}"))
+        
+        # Convert to Series with proper indexing (matching original logic)
+        # Create Series with same length as transactions DataFrame, initialized with None
+        total_rows2 = len(self.transactions2)
+        lc_numbers2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
+        po_numbers2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
+        interunit_accounts2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
+        
+        # Now populate the found items at their correct DataFrame indices
+        for row, lc_num in lc_numbers2:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows2:
+                lc_numbers2_series.iloc[df_index] = lc_num
+        
+        for row, po_num in po_numbers2:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows2:
+                po_numbers2_series.iloc[df_index] = po_num
+        
+        for row, account in interunit_accounts2:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows2:
+                interunit_accounts2_series.iloc[df_index] = account
+        
+        # Close workbooks
+        wb1.close()
+        wb2.close()
+        
+        print(f"Data extraction complete:")
+        print(f"  File 1: {len(lc_numbers1)} LC, {len(po_numbers1)} PO, {len(interunit_accounts1)} Interunit")
+        print(f"  File 2: {len(lc_numbers2)} LC, {len(po_numbers2)} PO, {len(interunit_accounts2)} Interunit")
+        
+        return {
+            'lc_numbers1': lc_numbers1_series,
+            'po_numbers1': po_numbers1_series,
+            'interunit_accounts1': interunit_accounts1_series,
+            'lc_numbers2': lc_numbers2_series,
+            'po_numbers2': po_numbers2_series,
+            'interunit_accounts2': interunit_accounts2_series
+        }
+
     def process_files(self):
         """Process both files and prepare for matching."""
         print("Reading Pole Book STEEL.xlsx...")
@@ -398,20 +524,21 @@ class   ExcelTransactionMatcher:
         # Let's check what's actually in the columns
         print(f"File 1 first row: {list(self.transactions1.iloc[0, :])}")
         
-        # Extract LC numbers from narration rows (non-bold Column C) using formatting
-        print("Extracting LC numbers from narration rows using formatting...")
-        lc_numbers1 = self.extract_lc_numbers_from_narration(self.file1_path)
-        lc_numbers2 = self.extract_lc_numbers_from_narration(self.file2_path)
+        # Load workbooks once and extract all data in a single pass
+        print("Loading workbooks and extracting all data...")
+        extracted_data = self.load_workbooks_and_extract_data()
         
-        # Extract PO numbers from narration rows (italic Column C) using formatting
-        print("Extracting PO numbers from narration rows using formatting...")
-        po_numbers1 = self.extract_po_numbers_from_narration(self.file1_path)
-        po_numbers2 = self.extract_po_numbers_from_narration(self.file2_path)
+        # Extract LC numbers from both files
+        lc_numbers1 = extracted_data['lc_numbers1']
+        lc_numbers2 = extracted_data['lc_numbers2']
         
-        # Extract interunit account references from narration rows (italic Column C) using formatting
-        print("Extracting interunit account references from narration rows using formatting...")
-        interunit_accounts1 = self.interunit_loan_matcher.extract_interunit_accounts_from_narration(self.transactions1, self.file1_path)
-        interunit_accounts2 = self.interunit_loan_matcher.extract_interunit_accounts_from_narration(self.transactions2, self.file2_path)
+        # Extract PO numbers from both files
+        po_numbers1 = extracted_data['po_numbers1']
+        po_numbers2 = extracted_data['po_numbers2']
+        
+        # Extract interunit loan accounts from both files
+        interunit_accounts1 = extracted_data['interunit_accounts1']
+        interunit_accounts2 = extracted_data['interunit_accounts2']
         
         # Identify transaction blocks using formatting
         print("Identifying transaction blocks using formatting...")
