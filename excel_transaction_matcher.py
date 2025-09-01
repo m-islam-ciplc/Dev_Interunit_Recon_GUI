@@ -10,7 +10,7 @@ from openpyxl.styles import Alignment
 import openpyxl
 from lc_matching_logic import LCMatchingLogic
 from po_matching_logic import POMatchingLogic
-
+from usd_matching_logic import USDMatchingLogic
 from interunit_loan_matching_logic import InterunitLoanMatcher
 from transaction_block_identifier import TransactionBlockIdentifier
 
@@ -29,6 +29,7 @@ from config import (
 # Import patterns from their respective modules
 from lc_matching_logic import LC_PATTERN
 from po_matching_logic import PO_PATTERN
+from usd_matching_logic import USD_PATTERN
 
 def print_configuration():
     """Print current configuration settings."""
@@ -43,6 +44,8 @@ def print_configuration():
     # print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")  # ❌ UNUSED - commenting out
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
+    print(f"PO Pattern: {PO_PATTERN}")
+    print(f"USD Pattern: {USD_PATTERN}")
     # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
     print("=" * 60)
 
@@ -57,8 +60,10 @@ def update_configuration():
     print("6. CREATE_SIMPLE_FILES - Whether to create simple test files")
     # print("7. CREATE_ALT_FILES - Whether to create alternative files")  # ❌ UNUSED - commenting out
     print("8. VERBOSE_DEBUG - Whether to show detailed debug output")
-    print("9. LC_PATTERN - Regex pattern for LC number extraction")
-    # print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
+    print("9. LC_PATTERN - Regex pattern for LC number extraction (defined in lc_matching_logic.py)")
+    print("10. PO_PATTERN - Regex pattern for PO number extraction (defined in po_matching_logic.py)")
+    print("11. USD_PATTERN - Regex pattern for USD amount extraction (defined in usd_matching_logic.py)")
+    # print("12. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
 
 class   ExcelTransactionMatcher:
     """
@@ -74,7 +79,7 @@ class   ExcelTransactionMatcher:
         self.transactions2 = None
         self.lc_matching_logic = LCMatchingLogic()
         self.po_matching_logic = POMatchingLogic()
-
+        self.usd_matching_logic = USDMatchingLogic()
         self.interunit_loan_matcher = InterunitLoanMatcher()
         self.block_identifier = TransactionBlockIdentifier()
         
@@ -130,52 +135,6 @@ class   ExcelTransactionMatcher:
         
         return description_series.apply(extract_single_po)
     
-    # ❌ UNUSED METHOD - commenting out
-    # def extract_lc_numbers_with_validation(self, description_series, transactions_df):
-    #     """Extract LC numbers and link them to parent transaction rows."""
-    #     lc_numbers = []
-    #     lc_parent_rows = []  # Track which parent row each LC belongs to
-    #     
-    #     for idx, description in enumerate(description_series):
-    #         # Check if this row has valid transaction data
-    #         row = transactions_df.iloc[idx]
-    #         
-    #         # Valid transaction row should have:
-    #         # 1. A date (not nan)
-    #         # 2. Either Debit or Credit amount (not both nan)
-    #         has_date = pd.notna(row.iloc[0])  # Date column
-    #         has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
-    #         has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
-    #         
-    #         if has_date and (has_debit or has_credit):
-    #             # This is a valid transaction row
-    #             # Check if it has an LC number
-    #             lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
-    #             lc_numbers.append(lc)
-    #                 lc_parent_rows.append(idx)  # This row is its own parent
-    #         else:
-    #             # This might be a description row
-    #             lc = self.extract_lc_numbers(pd.Series([description])).iloc[0]
-    #             if lc is not None:
-    #                     # Found LC in description row, need to find parent transaction row
-    #                     parent_row = self.find_parent_transaction_row(idx, transactions_df)
-    #                     if parent_row is not None:
-    #                         print(f"DEBUG: LC {lc} at row {idx} linked to parent row {parent_row}")
-    #                         lc_numbers.append(lc)
-    #                         lc_parent_rows.append(parent_row)
-    #                     else:
-    #                         print(f"DEBUG: LC {lc} at row {idx} - NO PARENT FOUND!")
-    #                         lc_numbers.append(None)
-    #                         lc_parent_rows.append(None)
-    #                 else:
-    #                     lc_numbers.append(None)
-    #                         lc_parent_rows.append(None)
-    #         
-    #         # Store parent row mapping for later use
-    #         self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))
-    #         
-    #         return pd.Series(lc_numbers)
-    
     def extract_lc_numbers_from_narration(self, file_path):
         """Extract LC numbers from narration rows (regular text Column C - not bold, not italic) using openpyxl formatting."""
         lc_numbers = []
@@ -221,7 +180,6 @@ class   ExcelTransactionMatcher:
         wb.close()
         
         # Store parent row mapping for later use
-        # self.lc_parent_mapping = dict(zip(range(len(lc_numbers)), lc_parent_rows))  # ❌ UNUSED - commenting out
         
         return pd.Series(lc_numbers)
     
@@ -400,6 +358,7 @@ class   ExcelTransactionMatcher:
         # Extract all data from File 1
         lc_numbers1 = []
         po_numbers1 = []
+        usd_amounts1 = []
         interunit_accounts1 = []
         
         # Process File 1 rows 9 onwards (same logic as individual methods)
@@ -416,6 +375,11 @@ class   ExcelTransactionMatcher:
                 if po_matches:
                     po_numbers1.append((row, po_matches[0]))
                 
+                # Extract USD amounts
+                usd_matches = re.findall(USD_PATTERN, str(narration).upper())
+                if usd_matches:
+                    usd_amounts1.append((row, usd_matches[0]))
+                
                 # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
                 interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
                 if interunit_matches:
@@ -426,6 +390,7 @@ class   ExcelTransactionMatcher:
         total_rows1 = len(self.transactions1)
         lc_numbers1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
         po_numbers1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
+        usd_amounts1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
         interunit_accounts1_series = pd.Series([None] * total_rows1, index=range(total_rows1))
         
         # Now populate the found items at their correct DataFrame indices
@@ -439,6 +404,11 @@ class   ExcelTransactionMatcher:
             if 0 <= df_index < total_rows1:
                 po_numbers1_series.iloc[df_index] = po_num
         
+        for row, usd_amount in usd_amounts1:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows1:
+                usd_amounts1_series.iloc[df_index] = usd_amount
+        
         for row, account in interunit_accounts1:
             df_index = row - 9  # Excel row 9 = DataFrame index 0
             if 0 <= df_index < total_rows1:
@@ -447,6 +417,7 @@ class   ExcelTransactionMatcher:
         # Extract all data from File 2
         lc_numbers2 = []
         po_numbers2 = []
+        usd_amounts2 = []
         interunit_accounts2 = []
         
         # Process File 2 rows 9 onwards
@@ -463,6 +434,11 @@ class   ExcelTransactionMatcher:
                 if po_matches:
                     po_numbers2.append((row, po_matches[0]))
                 
+                # Extract USD amounts
+                usd_matches = re.findall(USD_PATTERN, str(narration).upper())
+                if usd_matches:
+                    usd_amounts2.append((row, usd_matches[0]))
+                
                 # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
                 interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
                 if interunit_matches:
@@ -473,6 +449,7 @@ class   ExcelTransactionMatcher:
         total_rows2 = len(self.transactions2)
         lc_numbers2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
         po_numbers2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
+        usd_amounts2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
         interunit_accounts2_series = pd.Series([None] * total_rows2, index=range(total_rows2))
         
         # Now populate the found items at their correct DataFrame indices
@@ -486,6 +463,11 @@ class   ExcelTransactionMatcher:
             if 0 <= df_index < total_rows2:
                 po_numbers2_series.iloc[df_index] = po_num
         
+        for row, usd_amount in usd_amounts2:
+            df_index = row - 9  # Excel row 9 = DataFrame index 0
+            if 0 <= df_index < total_rows2:
+                usd_amounts2_series.iloc[df_index] = usd_amount
+        
         for row, account in interunit_accounts2:
             df_index = row - 9  # Excel row 9 = DataFrame index 0
             if 0 <= df_index < total_rows2:
@@ -496,15 +478,17 @@ class   ExcelTransactionMatcher:
         wb2.close()
         
         print(f"Data extraction complete:")
-        print(f"  File 1: {len(lc_numbers1)} LC, {len(po_numbers1)} PO, {len(interunit_accounts1)} Interunit")
-        print(f"  File 2: {len(lc_numbers2)} LC, {len(po_numbers2)} PO, {len(interunit_accounts2)} Interunit")
+        print(f"  File 1: {len(lc_numbers1)} LC, {len(po_numbers1)} PO, {len(usd_amounts1)} USD, {len(interunit_accounts1)} Interunit")
+        print(f"  File 2: {len(lc_numbers2)} LC, {len(po_numbers2)} PO, {len(usd_amounts2)} USD, {len(interunit_accounts2)} Interunit")
         
         return {
             'lc_numbers1': lc_numbers1_series,
             'po_numbers1': po_numbers1_series,
+            'usd_amounts1': usd_amounts1_series,
             'interunit_accounts1': interunit_accounts1_series,
             'lc_numbers2': lc_numbers2_series,
             'po_numbers2': po_numbers2_series,
+            'usd_amounts2': usd_amounts2_series,
             'interunit_accounts2': interunit_accounts2_series
         }
 
@@ -543,6 +527,10 @@ class   ExcelTransactionMatcher:
         interunit_accounts1 = extracted_data['interunit_accounts1']
         interunit_accounts2 = extracted_data['interunit_accounts2']
         
+        # Extract USD amounts from both files
+        usd_amounts1 = extracted_data['usd_amounts1']
+        usd_amounts2 = extracted_data['usd_amounts2']
+        
         # Identify transaction blocks using formatting
         print("Identifying transaction blocks using formatting...")
         blocks1 = self.block_identifier.identify_transaction_blocks(self.transactions1, self.file1_path)
@@ -551,11 +539,11 @@ class   ExcelTransactionMatcher:
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
         
-        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2
+        return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2
     
     def find_potential_matches(self):
-        """Find potential LC, PO, and Interunit number matches between the two files (sequential approach)."""
-        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2 = self.process_files()
+        """Find potential LC, PO, Interunit, and USD matches between the two files (sequential approach)."""
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
         
         print("\n" + "="*60)
         print("STEP 1: LC MATCHING")
@@ -655,8 +643,49 @@ class   ExcelTransactionMatcher:
         
         print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
         
+        # Step 4: Find USD matches on UNMATCHED records
+        print("\n" + "="*60)
+        print("STEP 4: USD MATCHING (ON UNMATCHED RECORDS)")
+        print("="*60)
+        
+        # Create masks for unmatched records (after LC, PO, and Interunit matching)
+        lc_po_interunit_matched_indices1 = set()
+        lc_po_interunit_matched_indices2 = set()
+        
+        for match in lc_matches + po_matches + interunit_matches:
+            lc_po_interunit_matched_indices1.add(match['File1_Index'])
+            lc_po_interunit_matched_indices2.add(match['File2_Index'])
+        
+        # Filter USD amounts to only unmatched records
+        usd_amounts1_unmatched = usd_amounts1.copy()
+        usd_amounts2_unmatched = usd_amounts2.copy()
+        
+        # Mark matched records as None in USD amounts
+        for idx in lc_po_interunit_matched_indices1:
+            if idx < len(usd_amounts1_unmatched):
+                usd_amounts1_unmatched.iloc[idx] = None
+        
+        for idx in lc_po_interunit_matched_indices2:
+            if idx < len(usd_amounts2_unmatched):
+                usd_amounts2_unmatched.iloc[idx] = None
+        
+        print(f"File 1: {len(usd_amounts1_unmatched[usd_amounts1_unmatched.notna()])} unmatched USD amounts")
+        print(f"File 2: {len(usd_amounts2_unmatched[usd_amounts2_unmatched.notna()])} unmatched USD amounts")
+        
+        # Find USD matches on unmatched records with shared state
+        usd_matches = self.usd_matching_logic.find_potential_matches(
+            transactions1, transactions2, usd_amounts1_unmatched, usd_amounts2_unmatched,
+            shared_existing_matches, shared_match_counter
+        )
+        
+        # Update the shared counter after USD matching
+        if usd_matches:
+            shared_match_counter = max(int(match['match_id'][1:]) for match in usd_matches)
+        
+        print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
+        
         # Combine all matches
-        all_matches = lc_matches + po_matches + interunit_matches
+        all_matches = lc_matches + po_matches + interunit_matches + usd_matches
         
         print(f"\n" + "="*60)
         print("FINAL RESULTS")
@@ -665,6 +694,7 @@ class   ExcelTransactionMatcher:
         print(f"  - LC Matches: {len(lc_matches)}")
         print(f"  - PO Matches: {len(po_matches)}")
         print(f"  - Interunit Loan Matches: {len(interunit_matches)}")
+        print(f"  - USD Matches: {len(usd_matches)}")
         
         return all_matches
     
@@ -714,24 +744,49 @@ class   ExcelTransactionMatcher:
 
     
     def create_audit_info(self, match):
-        """Create audit info in clean, readable plaintext format for LC, PO, and Interunit matches."""
+        """Create audit info in clean, readable plaintext format for LC, PO, Interunit, and USD matches."""
         # Determine match type and create appropriate audit info
-        if 'LC_Number' in match and match['LC_Number']:
-            # This is an LC match - use File1_Amount or File2_Amount
+        if 'Match_Type' in match:
+            # Use explicit match type if available
+            match_type = match['Match_Type']
             amount = match.get('File1_Amount', match.get('File2_Amount', 0))
-            audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
-        elif 'PO_Number' in match and match['PO_Number']:
-            # This is a PO match - use File1_Amount or File2_Amount
-            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
-            audit_info = f"PO Match: {match['PO_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
-        elif 'Interunit_Account' in match and match['Interunit_Account']:
-            # This is an Interunit Loan match - use File1_Amount or File2_Amount
-            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
-            audit_info = f"Interunit Loan Match: {match['Interunit_Account']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            
+            if match_type == 'LC':
+                lc_number = match.get('LC_Number', 'Unknown')
+                audit_info = f"LC Match: {lc_number}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif match_type == 'PO':
+                po_number = match.get('PO_Number', 'Unknown')
+                audit_info = f"PO Match: {po_number}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif match_type == 'Interunit':
+                interunit_account = match.get('Interunit_Account', 'Unknown')
+                audit_info = f"Interunit Loan Match: {interunit_account}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif match_type == 'USD':
+                usd_amount = match.get('USD_Amount', 'Unknown')
+                audit_info = f"USD Match: {usd_amount}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            else:
+                audit_info = f"{match_type} Match\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         else:
-            # Fallback for unknown match type
-            amount = match.get('File1_Amount', match.get('File2_Amount', 0))
-            audit_info = f"Unknown Match Type\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            # Fallback to old logic for backward compatibility
+            if 'LC_Number' in match and match['LC_Number']:
+                # This is an LC match - use File1_Amount or File2_Amount
+                amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+                audit_info = f"LC Match: {match['LC_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif 'PO_Number' in match and match['PO_Number']:
+                # This is a PO match - use File1_Amount or File2_Amount
+                amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+                audit_info = f"PO Match: {match['PO_Number']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif 'Interunit_Account' in match and match['Interunit_Account']:
+                # This is an Interunit Loan match - use File1_Amount or File2_Amount
+                amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+                audit_info = f"Interunit Loan Match: {match['Interunit_Account']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            elif 'USD_Amount' in match and match['USD_Amount']:
+                # This is a USD match - use File1_Amount or File2_Amount
+                amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+                audit_info = f"USD Match: {match['USD_Amount']}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
+            else:
+                # Fallback for unknown match type
+                amount = match.get('File1_Amount', match.get('File2_Amount', 0))
+                audit_info = f"Unknown Match Type\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         
         return audit_info
     
@@ -1041,11 +1096,13 @@ class   ExcelTransactionMatcher:
         # Create file1 with new columns
         file1_matched = transactions1.copy()
         
-        # Insert new columns at the beginning
-        file1_matched.insert(0, 'Match ID', None)
-        file1_matched.insert(1, 'Audit Info', None)
+        # Create new columns with proper names
+        match_id_col = pd.Series([None] * len(file1_matched), name='Match ID')
+        audit_info_col = pd.Series([None] * len(file1_matched), name='Audit Info')
+        match_type_col = pd.Series([None] * len(file1_matched), name='Match Type')
         
-
+        # Concatenate new columns with existing data
+        file1_matched = pd.concat([match_id_col, audit_info_col, file1_matched, match_type_col], axis=1)
         
         print(f"DEBUG: File1 DataFrame created with shape: {file1_matched.shape}")
         print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
@@ -1053,16 +1110,16 @@ class   ExcelTransactionMatcher:
         # Create file2 with new columns
         file2_matched = transactions2.copy()
         
-        # Insert new columns at the beginning
-        file2_matched.insert(0, 'Match ID', None)
-        file2_matched.insert(1, 'Audit Info', None)
+        # Create new columns with proper names
+        match_id_col2 = pd.Series([None] * len(file2_matched), name='Match ID')
+        audit_info_col2 = pd.Series([None] * len(file2_matched), name='Audit Info')
+        match_type_col2 = pd.Series([None] * len(file2_matched), name='Match Type')
+        
+        # Concatenate new columns with existing data
+        file2_matched = pd.concat([match_id_col2, audit_info_col2, file2_matched, match_type_col2], axis=1)
         
         print(f"DEBUG: File2 DataFrame created with shape: {file2_matched.shape}")
         print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
-        
-        # Add Match Type column at the end (last column)
-        file1_matched['Match Type'] = None
-        file2_matched['Match Type'] = None
         
         print(f"DEBUG: Added Match Type column to both DataFrames")
         print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
@@ -1082,7 +1139,11 @@ class   ExcelTransactionMatcher:
             audit_info = self.create_audit_info(match)
             
             print(f"Match {match_id}:")
-            if 'LC_Number' in match and match['LC_Number']:
+            # Use the explicit Match_Type field if available, otherwise fall back to inference
+            if 'Match_Type' in match and match['Match_Type']:
+                match_type = match['Match_Type']
+                print(f"  Match Type: {match_type} (from explicit field)")
+            elif 'LC_Number' in match and match['LC_Number']:
                 print(f"  LC Number: {match['LC_Number']}")
                 match_type = 'LC'
             elif 'PO_Number' in match and match['PO_Number']:
@@ -1109,18 +1170,18 @@ class   ExcelTransactionMatcher:
             file1_block_rows = self.block_identifier.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID, but Audit Info and Match Type only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID and Match Type, but Audit Info only in second-to-last row
             for i, block_row in enumerate(file1_block_rows):
                 if 0 <= block_row < len(file1_matched):
-                    file1_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
+                    file1_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
+                    file1_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
                     
-                    # Audit Info and Match Type go ONLY in the second-to-last row of the transaction block
+                    # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file1_block_rows) - 2:  # Second-to-last row
-                        file1_matched.iloc[block_row, 1] = audit_info
-                        file1_matched.iloc[block_row, -1] = match_type  # Match Type only in second-to-last row
+                        file1_matched.iloc[block_row, 1] = audit_info  # Audit Info column (index 1)
                         print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
                     else:
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' only")
+                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Match Type '{match_type}'")
             
 
             
@@ -1134,18 +1195,18 @@ class   ExcelTransactionMatcher:
             file2_block_rows = self.block_identifier.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID, but Audit Info and Match Type only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID and Match Type, but Audit Info only in second-to-last row
             for i, block_row in enumerate(file2_block_rows):
                 if 0 <= block_row < len(file2_matched):
-                    file2_matched.iloc[block_row, 0] = match_id  # Match ID column on all rows
+                    file2_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
+                    file2_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
                     
-                    # Audit Info and Match Type go ONLY in the second-to-last row of the transaction block
+                    # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file2_block_rows) - 2:  # Second-to-last row
-                        file2_matched.iloc[block_row, 1] = audit_info
-                        file2_matched.iloc[block_row, -1] = match_type  # Match Type only in second-to-last row
+                        file2_matched.iloc[block_row, 1] = audit_info  # Audit Info column (index 1)
                         print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
                     else:
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' only")
+                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Match Type '{match_type}'")
         
         # Save matched files using configuration variables
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]

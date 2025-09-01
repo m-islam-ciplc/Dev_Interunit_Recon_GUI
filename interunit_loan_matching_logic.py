@@ -190,6 +190,7 @@ class InterunitLoanMatcher:
                                         # Create match following CORE FORMAT exactly
                                         match = {
                                             'match_id': match_id,
+                                            'Match_Type': 'Interunit',  # Add explicit match type
                                             'Interunit_Account': f"{file1_narration_contains} ↔ {file2_narration_contains}",
                                             'File1_Index': block1['amounts']['row'],
                                             'File2_Index': block2['amounts']['row'],

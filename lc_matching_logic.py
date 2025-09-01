@@ -125,6 +125,7 @@ class LCMatchingLogic:
                 # Create the match
                 matches.append({
                     'match_id': match_id,
+                    'Match_Type': 'LC',  # Add explicit match type
                     'File1_Index': block_header1,
                     'File2_Index': block_header2,
                     'LC_Number': lc1,
