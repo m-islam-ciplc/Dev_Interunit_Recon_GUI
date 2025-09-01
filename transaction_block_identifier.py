@@ -133,52 +133,6 @@ class TransactionBlockIdentifier:
         print(f"DEBUG: Block starts at row {df_block_start} and includes rows up to 'Entered By :'")
         return block_rows
     
-    # ❌ UNUSED METHOD - commenting out
-    # def find_narration_row_in_block(self, block_rows, file_path):
-    #     """
-    #     Find the narration row in the transaction block (regular text - not bold, not italic in Column C).
-    #     
-    #     Args:
-    #         block_rows: List of row indices that belong to the transaction block
-    #         file_path: Path to the Excel file to analyze
-    #     
-    #     Returns:
-    #         Row index of the narration row, or None if not found
-    #     """
-    #     # Load workbook with openpyxl to access formatting
-    #     wb = openpyxl.load_workbook(file_path)
-    #     wb.active
-    #     
-    #     narration_row = None
-    #     
-    #     # Look for the narration row (regular text - not bold, not italic in Column C)
-    #     for block_row in block_rows:
-    #         # Convert DataFrame row index to Excel row number (add 10 because DataFrame starts at 0, Excel starts at 10)
-    #         excel_row = block_row + 10
-    #             
-    #         if excel_row <= ws.max_row:
-    #             desc_cell = ws.cell(row=excel_row, column=3)  # Column C (Description)
-    #                 
-    #             # Check if this row has italic text (not bold, but italic) in Column C
-    #             is_narration = (desc_cell.value and 
-    #                            desc_cell.font and 
-    #                            not desc_cell.font.bold and 
-    #                            desc_italic)
-    #                 
-    #             if is_narration:
-    #                 narration_row = block_row
-    #                 print(f"DEBUG: Found narration row at Excel row {excel_row} with text: '{desc_cell.value}'")
-    #                 break
-    #     
-    #     wb.close()
-    #     
-    #     if narration_row is not None:
-    #         print(f"DEBUG: Found narration row at index {narration_row}")
-    #     else:
-    #         print(f"DEBUG: No narration row found in transaction block")
-    #     
-    #     return narration_row
-    
     def identify_transaction_blocks(self, transactions_df, file_path):
         """
         Identify all transaction blocks in the transactions DataFrame.
