@@ -1,4 +1,8 @@
 import pandas as pd
+import re
+
+# LC Number extraction pattern
+LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
 
 # Configuration
 # AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts

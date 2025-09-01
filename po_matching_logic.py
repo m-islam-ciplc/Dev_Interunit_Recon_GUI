@@ -1,4 +1,11 @@
 import pandas as pd
+import re
+
+# PO Number extraction pattern - Dynamic approach using /PO/ as anchor
+# Finds PO blocks that are continuous text with /PO/ in them
+# More flexible boundaries to catch PO numbers at sentence edges
+# Examples: CIL/C//PO//11/2024, CCEL/Reno//PO///2024/9/191024, G24/PO/2024/9/29505
+PO_PATTERN = r'(?:^|\s)([A-Z0-9/]+/PO/[A-Z0-9/]+)(?:\s|$|[,\.])'
 
 # Configuration
 # AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts

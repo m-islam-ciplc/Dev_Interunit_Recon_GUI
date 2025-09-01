@@ -22,10 +22,13 @@ from config import (
     INPUT_FILE1_PATH, INPUT_FILE2_PATH, OUTPUT_FOLDER, OUTPUT_SUFFIX,
     SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, 
     # CREATE_ALT_FILES,  # ❌ UNUSED - commenting out
-    VERBOSE_DEBUG,
-    LC_PATTERN, PO_PATTERN
+    VERBOSE_DEBUG
     # AMOUNT_TOLERANCE  # ❌ UNUSED - removed since all matching uses exact amounts
 )
+
+# Import patterns from their respective modules
+from lc_matching_logic import LC_PATTERN
+from po_matching_logic import PO_PATTERN
 
 def print_configuration():
     """Print current configuration settings."""

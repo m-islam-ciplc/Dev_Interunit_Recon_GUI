@@ -3,17 +3,9 @@
 # =============================================================================
 # Centralized configuration for all regex patterns and system settings
 
-# LC Number extraction pattern (modify if your LC numbers have different format)
-LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
-
-# OLD PO Pattern (commented out - specific format matching)
-# PO_PATTERN = r'[A-Z0-9]{2,4}/PO/\d{4}/\d{1,2}/\d{3,6}'
-
-# NEW PO Pattern - Dynamic approach using /PO/ as anchor
-# Finds PO blocks that are continuous text with /PO/ in them
-# More flexible boundaries to catch PO numbers at sentence edges
-# Examples: CIL/C//PO//11/2024, CCEL/Reno//PO///2024/9/191024, G24/PO/2024/9/29505
-PO_PATTERN = r'(?:^|\s)([A-Z0-9/]+/PO/[A-Z0-9/]+)(?:\s|$|[,\.])'
+# Regex patterns have been moved to their respective modules:
+# - LC_PATTERN → lc_matching_logic.py
+# - PO_PATTERN → po_matching_logic.py
 
 # Amount matching tolerance (for rounding differences)
 # AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
@@ -47,8 +39,8 @@ def print_configuration():
     print(f"Simple Files: {'Yes' if CREATE_SIMPLE_FILES else 'No'}")
     # print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")  # ❌ UNUSED - commenting out
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
-    print(f"LC Pattern: {LC_PATTERN}")
-    print(f"PO Pattern: {PO_PATTERN}")
+    print("LC Pattern: Defined in lc_matching_logic.py")
+    print("PO Pattern: Defined in po_matching_logic.py")
     # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
     print("=" * 60)
 
@@ -62,6 +54,6 @@ def update_configuration():
     print("5. CREATE_SIMPLE_FILES - Whether to create simple test files")
     # print("6. CREATE_ALT_FILES - Whether to create alternative files")  # ❌ UNUSED - commenting out
     print("7. VERBOSE_DEBUG - Whether to show detailed debug output")
-    print("8. LC_PATTERN - Regex pattern for LC number extraction")
-    print("9. PO_PATTERN - Regex pattern for PO number extraction")
+    print("8. LC_PATTERN - Defined in lc_matching_logic.py")
+    print("9. PO_PATTERN - Defined in po_matching_logic.py")
     # print("10. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
