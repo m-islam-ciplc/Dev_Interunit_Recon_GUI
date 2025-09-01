@@ -14,8 +14,14 @@ USD_PATTERN = r'\$\s*\.?\s*[\d,]+\.?\d*'
 class USDMatchingLogic:
     """Handles the logic for finding USD amount matches between two files."""
     
-    def __init__(self):
-        pass
+    def __init__(self, block_identifier):
+        """
+        Initialize with a shared TransactionBlockIdentifier instance.
+        
+        Args:
+            block_identifier: Shared instance of TransactionBlockIdentifier for consistent transaction block logic
+        """
+        self.block_identifier = block_identifier
     
     def find_potential_matches(self, transactions1, transactions2, usd_amounts1, usd_amounts2, existing_matches=None, match_counter=0):
         """Find potential USD amount matches between the two files."""
@@ -53,7 +59,7 @@ class USDMatchingLogic:
             print(f"\n--- Processing File 1 Row {idx1} with USD: {usd1} ---")
             
             # Find the transaction block header row for this USD in File 1
-            block_header1 = self.find_transaction_block_header(idx1, transactions1)
+            block_header1 = self.block_identifier.find_transaction_block_header(idx1, transactions1)
             header_row1 = transactions1.iloc[block_header1]
             
             # Extract amounts and determine transaction type for File 1
@@ -75,7 +81,7 @@ class USDMatchingLogic:
                 print(f"    Checking File 2 Row {idx2} with USD: {usd2}")
                 
                 # Find the transaction block header row for this USD in File 2
-                block_header2 = self.find_transaction_block_header(idx2, transactions2)
+                block_header2 = self.block_identifier.find_transaction_block_header(idx2, transactions2)
                 header_row2 = transactions2.iloc[block_header2]
                 
                 # Extract amounts and determine transaction type for File 2
@@ -215,25 +221,5 @@ class USDMatchingLogic:
         
         return matches
     
-    def find_transaction_block_header(self, description_row_idx, transactions_df):
-        """Find the transaction block header row for a given description row."""
-        # Start from the description row and go backwards to find the block header
-        # Block header is the row with date and particulars (Dr/Cr)
-        for row_idx in range(description_row_idx, -1, -1):
-            row = transactions_df.iloc[row_idx]
-            
-            # Check if this row has a date and particulars
-            has_date = pd.notna(row.iloc[0]) and str(row.iloc[0]).strip() != ''
-            has_particulars = pd.notna(row.iloc[1]) and str(row.iloc[1]).strip() != ''
-            
-            # Check if this row has either Debit or Credit amount (not both nan)
-            # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
-            has_debit = pd.notna(row.iloc[7]) and row.iloc[7] != 0
-            has_credit = pd.notna(row.iloc[8]) and row.iloc[8] != 0
-            
-            # Transaction block header: has date, particulars, and either debit or credit
-            if has_date and (has_debit or has_credit):
-                return row_idx
-        
-        # If no header found, return the description row itself
-        return description_row_idx
+    # Transaction block identification methods are now provided by the shared TransactionBlockIdentifier instance
+    # This ensures consistent behavior across all matching modules

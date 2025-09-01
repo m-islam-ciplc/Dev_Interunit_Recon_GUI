@@ -219,3 +219,107 @@ class TransactionBlockIdentifier:
         
         print(f"DEBUG: Identified {len(transaction_blocks)} transaction blocks")
         return transaction_blocks
+    
+    def find_transaction_block_header(self, description_row_idx, transactions_df):
+        """
+        Find the transaction block header row for a given description row.
+        This is the UNIVERSAL method used by all matching modules.
+        
+        Args:
+            description_row_idx: The row index of a description/narration row
+            transactions_df: DataFrame containing transaction data
+        
+        Returns:
+            Row index of the transaction block header (with date, particulars, and amounts)
+        """
+        # Start from the description row and go backwards to find the block header
+        # Block header is the row with date and particulars (Dr/Cr) and amounts
+        for row_idx in range(description_row_idx, -1, -1):
+            row = transactions_df.iloc[row_idx]
+            
+            # Check if this row has a date and particulars
+            has_date = pd.notna(row.iloc[0]) and str(row.iloc[0]).strip() != ''
+            has_debit = pd.notna(row.iloc[7]) and row.iloc[7] != 0
+            has_credit = pd.notna(row.iloc[8]) and row.iloc[8] != 0
+            
+            # Transaction block header: has date, particulars, and either debit or credit
+            if has_date and (has_debit or has_credit):
+                return row_idx
+        
+        # If no header found, return the description row itself
+        return description_row_idx
+    
+    def find_description_row_in_block(self, row_idx, transactions_df):
+        """
+        Find the description row (with narration) within a transaction block.
+        This is the UNIVERSAL method used by all matching modules.
+        
+        Args:
+            row_idx: The row index to start searching from
+            transactions_df: DataFrame containing transaction data
+        
+        Returns:
+            Row index of the description row with narration text, or None if not found
+        """
+        # Start from the current row and look for a description row
+        # Description row has narration text in column 2 (iloc[2])
+        
+        # Look backwards first to find description row
+        for i in range(row_idx, -1, -1):
+            row = transactions_df.iloc[i]
+            narration = str(row.iloc[2]).strip()
+            
+            # Check if this row has meaningful narration text
+            if (len(narration) > 10 and 
+                narration.lower() not in ['nan', 'none', ''] and
+                not narration.startswith('Dr') and 
+                not narration.startswith('Cr')):
+                return i
+        
+        # If not found looking backwards, look forwards
+        for i in range(row_idx + 1, len(transactions_df)):
+            row = transactions_df.iloc[i]
+            narration = str(row.iloc[2]).strip()
+            
+            # Check if this row has meaningful narration text
+            if (len(narration) > 10 and 
+                narration.lower() not in ['nan', 'none', ''] and
+                not narration.startswith('Dr') and 
+                not narration.startswith('Cr')):
+                return i
+        
+        return None
+    
+    def find_parent_transaction_row(self, current_row, transactions_df):
+        """
+        Find the parent transaction row for a description row.
+        This is the UNIVERSAL method used by all matching modules.
+        
+        Args:
+            current_row: The row index to start searching from
+            transactions_df: DataFrame containing transaction data
+        
+        Returns:
+            Row index of the parent transaction row (with date and amounts), or None if not found
+        """
+        # Look backwards from current row to find the most recent transaction row
+        for row_idx in range(current_row - 1, -1, -1):
+            row = transactions_df.iloc[row_idx]
+            has_date = pd.notna(row.iloc[0])  # Date column
+            has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
+            has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
+            
+            if has_date and (has_debit or has_credit):
+                return row_idx
+        
+        # If no parent found looking backwards, look forwards
+        for row_idx in range(current_row + 1, len(transactions_df)):
+            row = transactions_df.iloc[row_idx]
+            has_date = pd.notna(row.iloc[0])  # Date column
+            has_debit = pd.notna(row.iloc[7]) and float(row.iloc[7]) > 0  # Debit column
+            has_credit = pd.notna(row.iloc[8]) and float(row.iloc[8]) > 0  # Credit column
+            
+            if has_date and (has_debit or has_credit):
+                return row_idx
+        
+        return None
