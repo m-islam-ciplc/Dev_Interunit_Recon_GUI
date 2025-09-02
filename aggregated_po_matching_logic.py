@@ -1,7 +1,6 @@
 import pandas as pd
 import re
-
-PO_PATTERN = r'(?:^|\s)([A-Z0-9/]+/PO/[A-Z0-9/]+)(?:\s|$|[,\.])'
+from po_matching_logic import PO_PATTERN
 
 class AggregatedPOMatchingLogic:
     """Handles the logic for finding aggregated PO matches between two files."""

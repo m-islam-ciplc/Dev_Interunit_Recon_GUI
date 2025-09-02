@@ -1,5 +1,4 @@
 import pandas as pd
-import re
 
 # PO Number extraction pattern - Dynamic approach using /PO/ as anchor
 # Finds PO blocks that are continuous text with /PO/ in them
@@ -8,7 +7,7 @@ import re
 PO_PATTERN = r'(?:^|\s)([A-Z0-9/]+/PO/[A-Z0-9/]+)(?:\s|$|[,\.])'
 
 # Configuration
-# AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
+
 
 class POMatchingLogic:
     """Handles the logic for finding PO number matches between two files."""
@@ -174,8 +173,4 @@ class POMatchingLogic:
     
 
     
-    # ❌ UNUSED METHOD - commenting out
-    # def set_amount_tolerance(self, tolerance):
-    #     """Set the amount tolerance for matching."""
-    #     self.amount_tolerance = tolerance
-    #     print(f"Amount tolerance set to: {self.amount_tolerance}")
+

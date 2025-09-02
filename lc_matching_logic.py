@@ -1,11 +1,10 @@
 import pandas as pd
-import re
 
 # LC Number extraction pattern
 LC_PATTERN = r'\b(?:L/C|LC)[-\s]?\d+[/\s]?\d*\b'
 
 # Configuration
-# AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
+
 
 class LCMatchingLogic:
     """Handles the logic for finding LC number matches between two files."""
@@ -171,8 +170,4 @@ class LCMatchingLogic:
     
 
     
-    # ❌ UNUSED METHOD - commenting out
-    # def set_amount_tolerance(self, tolerance):
-    #     """Set the amount tolerance for matching."""
-    #     self.amount_tolerance = tolerance
-    #     print(f"Amount tolerance set to: {self.amount_tolerance}")
+

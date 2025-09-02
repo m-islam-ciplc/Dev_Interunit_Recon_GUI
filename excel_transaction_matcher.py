@@ -1,8 +1,6 @@
 import pandas as pd
-# import numpy as np  # ❌ UNUSED - commenting out
 import re
-from typing import List, Dict, Any, Tuple
-# import logging  # ❌ UNUSED - commenting out
+
 import os
 import sys
 import argparse
@@ -23,9 +21,7 @@ from transaction_block_identifier import TransactionBlockIdentifier
 from config import (
     INPUT_FILE1_PATH, INPUT_FILE2_PATH, OUTPUT_FOLDER, OUTPUT_SUFFIX,
     SIMPLE_SUFFIX, CREATE_SIMPLE_FILES, 
-    # CREATE_ALT_FILES,  # ❌ UNUSED - commenting out
     VERBOSE_DEBUG
-    # AMOUNT_TOLERANCE  # ❌ UNUSED - removed since all matching uses exact amounts
 )
 
 # Import patterns from their respective modules
@@ -43,13 +39,13 @@ def print_configuration():
     print(f"Output Folder: {OUTPUT_FOLDER}")
     print(f"Output Suffix: {OUTPUT_SUFFIX}")
     print(f"Simple Files: {'Yes' if CREATE_SIMPLE_FILES else 'No'}")
-    # print(f"Alternative Files: {'Yes' if CREATE_ALT_FILES else 'No'}")  # ❌ UNUSED - commenting out
+
     print(f"Verbose Debug: {'Yes' if VERBOSE_DEBUG else 'No'}")
     print(f"LC Pattern: {LC_PATTERN}")
     print(f"PO Pattern: {PO_PATTERN}")
     print(f"USD Pattern: {USD_PATTERN}")
     print("Narration Matching: Enabled (Exact text matching)")
-    # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
+
     print("=" * 60)
 
 def update_configuration():
@@ -61,13 +57,13 @@ def update_configuration():
     print("4. OUTPUT_SUFFIX - Suffix for matched files")
     print("5. SIMPLE_SUFFIX - Suffix for simple test files")
     print("6. CREATE_SIMPLE_FILES - Whether to create simple test files")
-    # print("7. CREATE_ALT_FILES - Whether to create alternative files")  # ❌ UNUSED - commenting out
+
     print("8. VERBOSE_DEBUG - Whether to show detailed debug output")
     print("9. LC_PATTERN - Regex pattern for LC number extraction (defined in lc_matching_logic.py)")
     print("10. PO_PATTERN - Regex pattern for PO number extraction (defined in po_matching_logic.py)")
     print("11. USD_PATTERN - Regex pattern for USD amount extraction (defined in usd_matching_logic.py)")
     print("12. Narration Matching - Exact text matching between files (highest priority)")
-    # print("13. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
+
 
 class   ExcelTransactionMatcher:
     """
@@ -88,10 +84,6 @@ class   ExcelTransactionMatcher:
         self.interunit_loan_matcher = InterunitLoanMatcher(self.block_identifier)
         self.aggregated_po_matching_logic = AggregatedPOMatchingLogic(self.block_identifier)
         self.narration_matching_logic = NarrationMatchingLogic(self.block_identifier)
-        
-        # ❌ UNUSED INSTANCE VARIABLES - commenting out
-        # self.lc_parent_mapping = None
-        # self.po_parent_mapping = None
         
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
@@ -151,7 +143,6 @@ class   ExcelTransactionMatcher:
         ws = wb.active
         
         for row in range(9, ws.max_row + 1):  # Start from row 9 (after headers)
-            particulars_cell = ws.cell(row=row, column=2)
             desc_cell = ws.cell(row=row, column=3)
             
             # Check if this is a narration row (italic text Column C - not bold, but italic)
@@ -205,13 +196,12 @@ class   ExcelTransactionMatcher:
         total_rows = len(transactions_df)
         
         # Initialize with None for all rows
-        for i in range(total_rows):
+        for _ in range(total_rows):
             po_numbers.append(None)
             po_parent_rows.append(None)
         
         # Now scan for PO numbers in narration rows and map them to DataFrame indices
         for excel_row in range(9, ws.max_row + 1):  # Excel rows start from 9
-            particulars_cell = ws.cell(row=excel_row, column=2)
             desc_cell = ws.cell(row=excel_row, column=3)
             
             # Check if this is a narration row (italic text Column C - not bold, but italic)
@@ -243,7 +233,6 @@ class   ExcelTransactionMatcher:
         wb.close()
         
         # Store parent row mapping for later use
-        # self.po_parent_mapping = dict(zip(range(len(po_numbers)), po_parent_rows))  # ❌ UNUSED - commenting out
         
         return pd.Series(po_numbers)
 
@@ -450,7 +439,7 @@ class   ExcelTransactionMatcher:
     
     def find_potential_matches(self):
         """Find potential LC, PO, Interunit, and USD matches between the two files (sequential approach)."""
-        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
+        transactions1, transactions2, _, _, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
         
         print("\n" + "="*60)
         print("STEP 1: NARRATION MATCHING (HIGHEST PRIORITY - Most reliable)")
@@ -784,7 +773,6 @@ class   ExcelTransactionMatcher:
                 if isinstance(date_val, str) and ('-' in str(date_val) or ':' in str(date_val)):
                     try:
                         # Parse the datetime string and convert to Tally format
-                        from datetime import datetime
                         parsed_date = pd.to_datetime(date_val)
                         return parsed_date.strftime('%d/%b/%Y')
                     except:
@@ -893,7 +881,7 @@ class   ExcelTransactionMatcher:
             # Get unique Match IDs in order they appear
             unique_match_ids = []
             seen_ids = set()
-            for idx, match_id in enumerate(match_id_column):
+            for _, match_id in enumerate(match_id_column):
                 if pd.notna(match_id) and match_id not in seen_ids:
                     unique_match_ids.append(match_id)
                     seen_ids.add(match_id)
@@ -1322,11 +1310,11 @@ class   ExcelTransactionMatcher:
         print(f"  {output_file2}")
         
         # Verify the data was populated correctly
-        self.verify_match_data(file1_matched, file2_matched, matches)
+        self.verify_match_data(file1_matched, file2_matched)
     
 
     
-    def verify_match_data(self, file1_matched, file2_matched, matches):
+    def verify_match_data(self, file1_matched, file2_matched):
         """Verify that Match ID and Audit Info columns are properly populated."""
         print(f"\n=== VERIFICATION RESULTS ===")
         
@@ -1354,7 +1342,7 @@ class   ExcelTransactionMatcher:
         # Show sample populated data
         if len(match_ids_1) > 0:
             print(f"\nFile 1 - Sample populated rows:")
-            for i, match_id in enumerate(match_ids_1[:3]):
+            for _, match_id in enumerate(match_ids_1[:3]):
                 # Find rows that actually have this match_id (not empty strings)
                 mask = (file1_matched.iloc[:, 0] == match_id) & (file1_matched.iloc[:, 0] != '')
                 if mask.any():
