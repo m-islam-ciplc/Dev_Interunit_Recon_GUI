@@ -27,14 +27,7 @@ class InterunitLoanMatcher:
     - FOLLOWS CORE LOGIC AND FORMAT EXACTLY
     """
     
-    def __init__(self, block_identifier):
-        """
-        Initialize with a shared TransactionBlockIdentifier instance.
-        
-        Args:
-            block_identifier: Shared instance of TransactionBlockIdentifier for consistent transaction block logic
-        """
-        self.block_identifier = block_identifier
+    def __init__(self):
         # Interunit account mapping (Full Format → Short Code)
         self.interunit_account_mapping = {
             'Brac Bank PLC-CD-A/C-2028701210002': 'BBL#0002',

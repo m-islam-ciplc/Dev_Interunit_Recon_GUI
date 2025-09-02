@@ -3,14 +3,8 @@ import pandas as pd
 class NarrationMatchingLogic:
     """Handles the logic for finding identical narration matches between two files."""
     
-    def __init__(self, block_identifier):
-        """
-        Initialize with a shared TransactionBlockIdentifier instance.
-        
-        Args:
-            block_identifier: Shared instance of TransactionBlockIdentifier for consistent transaction block logic
-        """
-        self.block_identifier = block_identifier
+    def __init__(self):
+        pass
     
     def find_potential_matches(self, transactions1, transactions2, existing_matches=None, match_counter=0):
         """Find potential identical narration matches between the two files."""
@@ -41,11 +35,11 @@ class NarrationMatchingLogic:
                 continue
                 
             # Find the transaction block header row for this index
-            block_header1 = self.block_identifier.find_transaction_block_header(idx1, transactions1)
+            block_header1 = self.find_transaction_block_header(idx1, transactions1)
             header_row1 = transactions1.iloc[block_header1]
             
             # Find the description row within this transaction block (narration is in description rows)
-            description_row1 = self.block_identifier.find_description_row_in_block(idx1, transactions1)
+            description_row1 = self.find_description_row_in_block(idx1, transactions1)
             if description_row1 is None:
                 continue
                 
@@ -95,11 +89,11 @@ class NarrationMatchingLogic:
                     continue
                     
                 # Find the transaction block header row for this index in File 2
-                block_header2 = self.block_identifier.find_transaction_block_header(idx2, transactions2)
+                block_header2 = self.find_transaction_block_header(idx2, transactions2)
                 header_row2 = transactions2.iloc[block_header2]
                 
                 # Find the description row within this transaction block in File 2
-                description_row2 = self.block_identifier.find_description_row_in_block(idx2, transactions2)
+                description_row2 = self.find_description_row_in_block(idx2, transactions2)
                 if description_row2 is None:
                     continue
                 
@@ -219,5 +213,52 @@ class NarrationMatchingLogic:
         
         return matches
     
-    # Transaction block identification methods are now provided by the shared TransactionBlockIdentifier instance
-    # This ensures consistent behavior across all matching modules
+    def find_description_row_in_block(self, row_idx, transactions_df):
+        """Find the description row (with narration) within a transaction block."""
+        # Start from the current row and look for a description row
+        # Description row has narration text in column 2 (iloc[2])
+        
+        # Look backwards first to find description row
+        for i in range(row_idx, -1, -1):
+            row = transactions_df.iloc[i]
+            narration = str(row.iloc[2]).strip()
+            
+            # Check if this row has meaningful narration text
+            if (len(narration) > 10 and 
+                narration.lower() not in ['nan', 'none', ''] and
+                not narration.startswith('Dr') and 
+                not narration.startswith('Cr')):
+                return i
+        
+        # If not found looking backwards, look forwards
+        for i in range(row_idx + 1, len(transactions_df)):
+            row = transactions_df.iloc[i]
+            narration = str(row.iloc[2]).strip()
+            
+            # Check if this row has meaningful narration text
+            if (len(narration) > 10 and 
+                narration.lower() not in ['nan', 'none', ''] and
+                not narration.startswith('Dr') and 
+                not narration.startswith('Cr')):
+                return i
+        
+        return None
+    
+    def find_transaction_block_header(self, description_row_idx, transactions_df):
+        """Find the transaction block header row for a given description row."""
+        # Start from the description row and go backwards to find the block header
+        # Block header is the row with date and particulars (Dr/Cr)
+        for row_idx in range(description_row_idx, -1, -1):
+            row = transactions_df.iloc[row_idx]
+            
+            # Check if this row has a date and particulars
+            has_date = pd.notna(row.iloc[0]) and str(row.iloc[0]).strip() != ''
+            has_debit = pd.notna(row.iloc[7]) and row.iloc[7] != 0
+            has_credit = pd.notna(row.iloc[8]) and row.iloc[8] != 0
+            
+            # Transaction block header: has date, particulars, and either debit or credit
+            if has_date and (has_debit or has_credit):
+                return row_idx
+        
+        # If no header found, return the description row itself
+        return description_row_idx
