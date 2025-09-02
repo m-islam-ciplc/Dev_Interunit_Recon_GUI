@@ -11,11 +11,11 @@
 # AMOUNT_TOLERANCE = 0.01  # ❌ UNUSED - removed since all matching uses exact amounts
 
 # File paths and output settings
-INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
-INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
+# INPUT_FILE1_PATH = "Input Files/Interunit Steel.xlsx"
+# INPUT_FILE2_PATH = "Input Files/Interunit GeoTex.xlsx"
 
-# INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
-# INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
+INPUT_FILE1_PATH = "Input Files/Pole Book STEEL.xlsx"
+INPUT_FILE2_PATH = "Input Files/Steel Book POLE.xlsx"
 
 # INPUT_FILE1_PATH = "Input Files/Steel book Trans.xlsx"
 # INPUT_FILE2_PATH = "Input Files/Trans book Steel.xlsx"

@@ -12,8 +12,6 @@ from lc_matching_logic import LCMatchingLogic
 from po_matching_logic import POMatchingLogic
 from usd_matching_logic import USDMatchingLogic
 from interunit_loan_matching_logic import InterunitLoanMatcher
-from aggregated_po_matching_logic import AggregatedPOMatchingLogic
-from narration_matching_logic import NarrationMatchingLogic
 from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
@@ -48,7 +46,6 @@ def print_configuration():
     print(f"LC Pattern: {LC_PATTERN}")
     print(f"PO Pattern: {PO_PATTERN}")
     print(f"USD Pattern: {USD_PATTERN}")
-    print("Narration Matching: Enabled (Exact text matching)")
     # print(f"Amount Tolerance: {AMOUNT_TOLERANCE}")  # ❌ UNUSED - removed
     print("=" * 60)
 
@@ -66,8 +63,7 @@ def update_configuration():
     print("9. LC_PATTERN - Regex pattern for LC number extraction (defined in lc_matching_logic.py)")
     print("10. PO_PATTERN - Regex pattern for PO number extraction (defined in po_matching_logic.py)")
     print("11. USD_PATTERN - Regex pattern for USD amount extraction (defined in usd_matching_logic.py)")
-    print("12. Narration Matching - Exact text matching between files (highest priority)")
-    # print("13. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
+    # print("12. AMOUNT_TOLERANCE - Tolerance for amount matching (0 for exact)")  # ❌ UNUSED - removed
 
 class   ExcelTransactionMatcher:
     """
@@ -85,8 +81,6 @@ class   ExcelTransactionMatcher:
         self.po_matching_logic = POMatchingLogic()
         self.usd_matching_logic = USDMatchingLogic()
         self.interunit_loan_matcher = InterunitLoanMatcher()
-        self.aggregated_po_matching_logic = AggregatedPOMatchingLogic()
-        self.narration_matching_logic = NarrationMatchingLogic()
         self.block_identifier = TransactionBlockIdentifier()
         
         # ❌ UNUSED INSTANCE VARIABLES - commenting out
@@ -552,55 +546,16 @@ class   ExcelTransactionMatcher:
         transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
         
         print("\n" + "="*60)
-        print("STEP 1: NARRATION MATCHING (HIGHEST PRIORITY - Most reliable)")
+        print("STEP 1: LC MATCHING")
         print("="*60)
         
-        # Initialize shared state for consistent Match IDs across all matching logic
+        # Initialize shared state for consistent Match IDs across LC and PO matching
         shared_existing_matches = {}
         shared_match_counter = 0
         
-        # Step 1: Find Narration matches (HIGHEST PRIORITY - Most reliable)
-        narration_matches = self.narration_matching_logic.find_potential_matches(
-            transactions1, transactions2, shared_existing_matches, shared_match_counter
-        )
-        
-        # Update the shared counter after Narration matching
-        if narration_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in narration_matches)
-        
-        print(f"\nNarration Matching Results: {len(narration_matches)} matches found")
-        
-        # Step 2: Find LC matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 2: LC MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after Narration matching)
-        narration_matched_indices1 = set()
-        narration_matched_indices2 = set()
-        
-        for match in narration_matches:
-            narration_matched_indices1.add(match['File1_Index'])
-            narration_matched_indices2.add(match['File2_Index'])
-        
-        # Filter LC numbers to only unmatched records
-        lc_numbers1_unmatched = lc_numbers1.copy()
-        lc_numbers2_unmatched = lc_numbers2.copy()
-        
-        # Mark matched records as None in LC numbers
-        for idx in narration_matched_indices1:
-            if idx < len(lc_numbers1_unmatched):
-                lc_numbers1_unmatched.iloc[idx] = None
-        
-        for idx in narration_matched_indices2:
-            if idx < len(lc_numbers2_unmatched):
-                lc_numbers2_unmatched.iloc[idx] = None
-        
-        print(f"File 1: {len(lc_numbers1_unmatched[lc_numbers1_unmatched.notna()])} unmatched LC numbers")
-        print(f"File 2: {len(lc_numbers2_unmatched[lc_numbers2_unmatched.notna()])} unmatched LC numbers")
-        
+        # Step 1: Find LC matches
         lc_matches = self.lc_matching_logic.find_potential_matches(
-            transactions1, transactions2, lc_numbers1_unmatched, lc_numbers2_unmatched,
+            transactions1, transactions2, lc_numbers1, lc_numbers2,
             shared_existing_matches, shared_match_counter
         )
         
@@ -610,29 +565,29 @@ class   ExcelTransactionMatcher:
         
         print(f"\nLC Matching Results: {len(lc_matches)} matches found")
         
-        # Step 3: Find PO matches on UNMATCHED records
+        # Step 2: Find PO matches on UNMATCHED records
         print("\n" + "="*60)
-        print("STEP 3: PO MATCHING (ON UNMATCHED RECORDS)")
+        print("STEP 2: PO MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration and LC matching)
-        narration_lc_matched_indices1 = set()
-        narration_lc_matched_indices2 = set()
+        # Create masks for unmatched records
+        lc_matched_indices1 = set()
+        lc_matched_indices2 = set()
         
-        for match in narration_matches + lc_matches:
-            narration_lc_matched_indices1.add(match['File1_Index'])
-            narration_lc_matched_indices2.add(match['File2_Index'])
+        for match in lc_matches:
+            lc_matched_indices1.add(match['File1_Index'])
+            lc_matched_indices2.add(match['File2_Index'])
         
         # Filter PO numbers to only unmatched records
         po_numbers1_unmatched = po_numbers1.copy()
         po_numbers2_unmatched = po_numbers2.copy()
         
         # Mark matched records as None in PO numbers
-        for idx in narration_lc_matched_indices1:
+        for idx in lc_matched_indices1:
             if idx < len(po_numbers1_unmatched):
                 po_numbers1_unmatched.iloc[idx] = None
         
-        for idx in narration_lc_matched_indices2:
+        for idx in lc_matched_indices2:
             if idx < len(po_numbers2_unmatched):
                 po_numbers2_unmatched.iloc[idx] = None
         
@@ -651,29 +606,29 @@ class   ExcelTransactionMatcher:
         
         print(f"\nPO Matching Results: {len(po_matches)} matches found")
         
-        # Step 4: Find Interunit Loan matches on UNMATCHED records
+        # Step 3: Find Interunit Loan matches on UNMATCHED records
         print("\n" + "="*60)
-        print("STEP 4: INTERUNIT LOAN MATCHING (ON UNMATCHED RECORDS)")
+        print("STEP 3: INTERUNIT LOAN MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration, LC, and PO matching)
-        narration_lc_po_matched_indices1 = set()
-        narration_lc_po_matched_indices2 = set()
+        # Create masks for unmatched records (after LC and PO matching)
+        lc_po_matched_indices1 = set()
+        lc_po_matched_indices2 = set()
         
-        for match in narration_matches + lc_matches + po_matches:
-            narration_lc_po_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_matched_indices2.add(match['File2_Index'])
+        for match in lc_matches + po_matches:
+            lc_po_matched_indices1.add(match['File1_Index'])
+            lc_po_matched_indices2.add(match['File2_Index'])
         
         # Filter interunit accounts to only unmatched records
         interunit_accounts1_unmatched = interunit_accounts1.copy()
         interunit_accounts2_unmatched = interunit_accounts2.copy()
         
         # Mark matched records as None in interunit accounts
-        for idx in narration_lc_po_matched_indices1:
+        for idx in lc_po_matched_indices1:
             if idx < len(interunit_accounts1_unmatched):
                 interunit_accounts1_unmatched.iloc[idx] = None
         
-        for idx in narration_lc_po_matched_indices2:
+        for idx in lc_po_matched_indices2:
             if idx < len(interunit_accounts2_unmatched):
                 interunit_accounts2_unmatched.iloc[idx] = None
         
@@ -688,29 +643,29 @@ class   ExcelTransactionMatcher:
         
         print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
         
-        # Step 5: Find USD matches on UNMATCHED records
+        # Step 4: Find USD matches on UNMATCHED records
         print("\n" + "="*60)
-        print("STEP 5: USD MATCHING (ON UNMATCHED RECORDS)")
+        print("STEP 4: USD MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration, LC, PO, and Interunit matching)
-        narration_lc_po_interunit_matched_indices1 = set()
-        narration_lc_po_interunit_matched_indices2 = set()
+        # Create masks for unmatched records (after LC, PO, and Interunit matching)
+        lc_po_interunit_matched_indices1 = set()
+        lc_po_interunit_matched_indices2 = set()
         
-        for match in narration_matches + lc_matches + po_matches + interunit_matches:
-            narration_lc_po_interunit_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_interunit_matched_indices2.add(match['File2_Index'])
+        for match in lc_matches + po_matches + interunit_matches:
+            lc_po_interunit_matched_indices1.add(match['File1_Index'])
+            lc_po_interunit_matched_indices2.add(match['File2_Index'])
         
         # Filter USD amounts to only unmatched records
         usd_amounts1_unmatched = usd_amounts1.copy()
         usd_amounts2_unmatched = usd_amounts2.copy()
         
         # Mark matched records as None in USD amounts
-        for idx in narration_lc_po_interunit_matched_indices1:
+        for idx in lc_po_interunit_matched_indices1:
             if idx < len(usd_amounts1_unmatched):
                 usd_amounts1_unmatched.iloc[idx] = None
         
-        for idx in narration_lc_po_interunit_matched_indices2:
+        for idx in lc_po_interunit_matched_indices2:
             if idx < len(usd_amounts2_unmatched):
                 usd_amounts2_unmatched.iloc[idx] = None
         
@@ -729,60 +684,17 @@ class   ExcelTransactionMatcher:
         
         print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
         
-        # Step 6: Find Aggregated PO matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 6: AGGREGATED PO MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after Narration, LC, PO, Interunit, and USD matching)
-        narration_lc_po_interunit_usd_matched_indices1 = set()
-        narration_lc_po_interunit_usd_matched_indices2 = set()
-        
-        for match in narration_matches + lc_matches + po_matches + interunit_matches + usd_matches:
-            narration_lc_po_interunit_usd_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_interunit_usd_matched_indices2.add(match['File2_Index'])
-        
-        # Filter PO numbers to only unmatched records
-        po_numbers1_unmatched_for_aggregated = po_numbers1.copy()
-        po_numbers2_unmatched_for_aggregated = po_numbers2.copy()
-        
-        # Mark matched records as None in PO numbers
-        for idx in narration_lc_po_interunit_usd_matched_indices1:
-            if idx < len(po_numbers1_unmatched_for_aggregated):
-                po_numbers1_unmatched_for_aggregated.iloc[idx] = None
-        
-        for idx in narration_lc_po_interunit_usd_matched_indices2:
-            if idx < len(po_numbers2_unmatched_for_aggregated):
-                po_numbers2_unmatched_for_aggregated.iloc[idx] = None
-        
-        print(f"File 1: {len(po_numbers1_unmatched_for_aggregated[po_numbers1_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        print(f"File 2: {len(po_numbers2_unmatched_for_aggregated[po_numbers2_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        
-        # Find aggregated PO matches on unmatched records with shared state
-        aggregated_po_matches = self.aggregated_po_matching_logic.find_potential_matches(
-            transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
-            shared_existing_matches, shared_match_counter
-        )
-        
-        # Update the shared counter after aggregated PO matching
-        if aggregated_po_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in aggregated_po_matches)
-        
-        print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
-        
         # Combine all matches
-        all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches + aggregated_po_matches
+        all_matches = lc_matches + po_matches + interunit_matches + usd_matches
         
         print(f"\n" + "="*60)
         print("FINAL RESULTS")
         print("="*60)
         print(f"Total Matches: {len(all_matches)}")
-        print(f"  - Narration Matches: {len(narration_matches)} (HIGHEST PRIORITY)")
         print(f"  - LC Matches: {len(lc_matches)}")
         print(f"  - PO Matches: {len(po_matches)}")
         print(f"  - Interunit Loan Matches: {len(interunit_matches)}")
         print(f"  - USD Matches: {len(usd_matches)}")
-        print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)}")
         
         return all_matches
     
@@ -839,9 +751,7 @@ class   ExcelTransactionMatcher:
             match_type = match['Match_Type']
             amount = match.get('File1_Amount', match.get('File2_Amount', 0))
             
-            if match_type == 'Narration':
-                audit_info = f"Narration Match\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
-            elif match_type == 'LC':
+            if match_type == 'LC':
                 lc_number = match.get('LC_Number', 'Unknown')
                 audit_info = f"LC Match: {lc_number}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
             elif match_type == 'PO':
@@ -853,13 +763,6 @@ class   ExcelTransactionMatcher:
             elif match_type == 'USD':
                 usd_amount = match.get('USD_Amount', 'Unknown')
                 audit_info = f"USD Match: {usd_amount}\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
-            elif match_type == 'Aggregated_PO':
-                po_count = match.get('PO_Count', 'Unknown')
-                all_pos = match.get('All_POs', [])
-                po_list = ', '.join(all_pos[:5])  # Show first 5 POs
-                if len(all_pos) > 5:
-                    po_list += f" ... and {len(all_pos) - 5} more"
-                audit_info = f"Aggregated PO Match: {po_count} POs\nPOs: {po_list}\nLender Amount: {amount:.2f}\nTotal Borrower Amount: {amount:.2f}"
             else:
                 audit_info = f"{match_type} Match\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         else:
