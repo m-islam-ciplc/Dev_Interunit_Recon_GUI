@@ -21,7 +21,7 @@ class POMatchingLogic:
         """
         self.block_identifier = block_identifier
     
-    def find_potential_matches(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_counter=0):
+    def find_potential_matches(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_id_manager=None):
         """Find potential PO number matches between the two files."""
         # Filter rows with PO numbers
         po_transactions1 = transactions1[po_numbers1.notna()].copy()
@@ -36,8 +36,9 @@ class POMatchingLogic:
         # Use shared state if provided, otherwise create new
         if existing_matches is None:
             existing_matches = {}
-        if match_counter is None:
-            match_counter = 0
+        if match_id_manager is None:
+            from match_id_manager import get_match_id_manager
+            match_id_manager = get_match_id_manager()
         
         print(f"\n=== PO MATCHING LOGIC ===")
         print(f"1. Check if lender debit and borrower credit amounts are EXACTLY the same")
@@ -94,40 +95,33 @@ class POMatchingLogic:
                 
                 # STEP 1: Check if amounts are EXACTLY the same
                 if file1_amount != file2_amount:
-                    print(f"      ❌ REJECTED: Amounts don't match ({file1_amount} vs {file2_amount})")
+                    print(f"       REJECTED: Amounts don't match ({file1_amount} vs {file2_amount})")
                     continue
                 
-                print(f"      ✅ STEP 1 PASSED: Amounts match exactly")
+                print(f"       STEP 1 PASSED: Amounts match exactly")
                 
                 # STEP 2: Check if transaction types are opposite (one lender, one borrower)
                 if not ((file1_is_lender and file2_is_borrower) or (file1_is_borrower and file2_is_lender)):
-                    print(f"      ❌ REJECTED: Transaction types don't match (both same type)")
+                    print(f"       REJECTED: Transaction types don't match (both same type)")
                     continue
                 
-                print(f"      ✅ STEP 2 PASSED: Transaction types are opposite")
+                print(f"       STEP 2 PASSED: Transaction types are opposite")
                 
                 # STEP 3: Check if PO numbers match
                 if po1 != po2:
-                    print(f"      ❌ REJECTED: PO numbers don't match ('{po1}' vs '{po2}')")
+                    print(f"       REJECTED: PO numbers don't match ('{po1}' vs '{po2}')")
                     continue
                 
-                print(f"      ✅ STEP 3 PASSED: PO numbers match")
+                print(f"       STEP 3 PASSED: PO numbers match")
                 
                 # STEP 4: Check if we already have a match for this combination
-                match_key = (po1, file1_amount)
+                # Create new sequential Match ID (simplified approach)
+                context = f"PO_{po1}_File1_Row_{idx1}_File2_Row_{idx2}"
+                # Match ID will be assigned later in post-processing
+                match_id = None
+                print(f"       CREATING new Match ID: {match_id}")
                 
-                if match_key in existing_matches:
-                    # Use existing Match ID for consistency
-                    match_id = existing_matches[match_key]
-                    print(f"      🔄 REUSING existing Match ID: {match_id}")
-                else:
-                    # Create new Match ID
-                    match_counter += 1
-                    match_id = f"M{match_counter:03d}"
-                    existing_matches[match_key] = match_id
-                    print(f"      🆕 CREATING new Match ID: {match_id}")
-                
-                print(f"      🎉 ALL CRITERIA MET - PO MATCH FOUND!")
+                print(f"       ALL CRITERIA MET - PO MATCH FOUND!")
                 
                 # Create the match
                 matches.append({

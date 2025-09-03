@@ -14,7 +14,7 @@ class AggregatedPOMatchingLogic:
         """
         self.block_identifier = block_identifier
     
-    def find_potential_matches(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_counter=0):
+    def find_potential_matches(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_id_manager=None):
         """Find potential aggregated PO matches between the two files."""
         
         print(f"\nFile 1: {len(transactions1)} transactions")
@@ -26,8 +26,9 @@ class AggregatedPOMatchingLogic:
         # Use shared state if provided, otherwise create new
         if existing_matches is None:
             existing_matches = {}
-        if match_counter is None:
-            match_counter = 0
+        if match_id_manager is None:
+            from match_id_manager import get_match_id_manager
+            match_id_manager = get_match_id_manager()
         
         print(f"\n=== AGGREGATED PO MATCHING LOGIC ===")
         print(f"1. Find lender transactions with MULTIPLE PO numbers in narration")
@@ -124,23 +125,24 @@ class AggregatedPOMatchingLogic:
                         })
                         total_borrower_amount += file2_credit
                         found_pos.add(po)
-                        print(f"    ✅ Found matching PO '{po}' in File 2 Row {block_header2}")
+                        print(f"     Found matching PO '{po}' in File 2 Row {block_header2}")
                         print(f"      Borrower Amount: {file2_credit}, Narration: {narration2[:50]}...")
                         break
             
             # Check if we found ALL lender POs in borrower transactions
             if len(found_pos) == len(po_matches1):
-                print(f"  🎯 All {len(po_matches1)} POs found in borrower transactions!")
+                print(f"   All {len(po_matches1)} POs found in borrower transactions!")
                 
                 # Validate: Lender amount == Total borrower amount (exact match, no tolerance)
                 if abs(file1_debit - total_borrower_amount) < 0.01:  # Allow small rounding differences
-                    print(f"  ✅ Amount validation PASSED: Lender {file1_debit} == Total Borrower {total_borrower_amount}")
+                    print(f"   Amount validation PASSED: Lender {file1_debit} == Total Borrower {total_borrower_amount}")
                     
-                    # Create the aggregated PO match
-                    match_counter += 1
-                    match_id = f"M{match_counter:03d}"
+                    # Generate next sequential Match ID using centralized manager
+                    context = f"AggregatedPO_{po_matches1[0]}_Total_{len(matching_borrower_transactions)}_POs"
+                    # Match ID will be assigned later in post-processing
+                    match_id = None
                     
-                    print(f"  🎉 AGGREGATED PO MATCH FOUND!")
+                    print(f"   AGGREGATED PO MATCH FOUND!")
                     
                     # Create the match
                     matches.append({
@@ -170,10 +172,10 @@ class AggregatedPOMatchingLogic:
                         'Borrower_Amount': total_borrower_amount
                     })
                 else:
-                    print(f"  ❌ Amount validation FAILED: Lender {file1_debit} != Total Borrower {total_borrower_amount}")
+                    print(f"   Amount validation FAILED: Lender {file1_debit} != Total Borrower {total_borrower_amount}")
             else:
                 missing_pos = set(po_matches1) - found_pos
-                print(f"  ❌ Missing POs in borrower transactions: {missing_pos}")
+                print(f"   Missing POs in borrower transactions: {missing_pos}")
         
         print(f"\n=== AGGREGATED PO MATCHING RESULTS ===")
         print(f"Found {len(matches)} valid aggregated PO matches!")

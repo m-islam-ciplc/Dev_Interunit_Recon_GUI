@@ -12,7 +12,7 @@ class NarrationMatchingLogic:
         """
         self.block_identifier = block_identifier
     
-    def find_potential_matches(self, transactions1, transactions2, existing_matches=None, match_counter=0):
+    def find_potential_matches(self, transactions1, transactions2, existing_matches=None, match_id_manager=None):
         """Find potential identical narration matches between the two files."""
         
         print(f"\nFile 1: {len(transactions1)} transactions")
@@ -24,8 +24,9 @@ class NarrationMatchingLogic:
         # Use shared state if provided, otherwise create new
         if existing_matches is None:
             existing_matches = {}
-        if match_counter is None:
-            match_counter = 0
+        if match_id_manager is None:
+            from match_id_manager import get_match_id_manager
+            match_id_manager = get_match_id_manager()
         
         print(f"\n=== NARRATION MATCHING LOGIC (STEP 1 - HIGHEST PRIORITY) ===")
         print(f"1. Find narrations with EXACTLY identical text between files")
@@ -135,7 +136,7 @@ class NarrationMatchingLogic:
                                 'type': 'Lender' if file2_is_lender else 'Borrower',
                                 'date': header_row2.iloc[0]
                             })
-                            print(f"    ✅ Found identical narration in File 2 Row {block_header2} (Header) / {description_row2} (Description)")
+                            print(f"    Found identical narration in File 2 Row {block_header2} (Header) / {description_row2} (Description)")
                             print(f"      Amount: {file2_amount}, Type: {'Lender' if file2_is_lender else 'Borrower'}")
                             
                             # Mark this narration and all similar ones in File 2 as processed
@@ -150,25 +151,14 @@ class NarrationMatchingLogic:
             
             # If we found matching transactions, create the match
             if matching_file2_transactions:
-                print(f"  🎯 Found {len(matching_file2_transactions)} matching transactions")
+                print(f"  Found {len(matching_file2_transactions)} matching transactions")
                 
                 # Create only ONE match per unique narration combination
                 # Take the first matching transaction (they should all be equivalent)
                 match_data = matching_file2_transactions[0]
                 
-                # Check if we already have a match for this combination
-                match_key = (narration1, file1_amount, match_data['amount'])
-                
-                if match_key in existing_matches:
-                    # Use existing Match ID for consistency
-                    match_id = existing_matches[match_key]
-                    print(f"    🔄 REUSING existing Match ID: {match_id}")
-                else:
-                    # Create new Match ID
-                    match_counter += 1
-                    match_id = f"M{match_counter:03d}"
-                    existing_matches[match_key] = match_id
-                    print(f"    🆕 CREATING new Match ID: {match_id}")
+                # Match ID will be assigned later in post-processing
+                match_id = None
                 
                 # Determine which file is lender and which is borrower
                 if file1_is_lender:
@@ -186,7 +176,7 @@ class NarrationMatchingLogic:
                     lender_amount = match_data['amount']
                     borrower_amount = file1_amount
                 
-                print(f"    🎉 NARRATION MATCH FOUND!")
+                print(f"    NARRATION MATCH FOUND!")
                 
                 # Create the match
                 matches.append({
@@ -212,7 +202,7 @@ class NarrationMatchingLogic:
                     'File2_Credit': match_data['amount'] if match_data['type'] == 'Borrower' else 0
                 })
             else:
-                print(f"  ❌ No identical narrations found in File 2")
+                print(f"  No identical narrations found in File 2")
         
         print(f"\n=== NARRATION MATCHING RESULTS ===")
         print(f"Found {len(matches)} valid narration matches across {len(existing_matches)} unique Match ID combinations!")

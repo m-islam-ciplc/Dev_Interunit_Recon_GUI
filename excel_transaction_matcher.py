@@ -101,11 +101,11 @@ class   ExcelTransactionMatcher:
         transactions = transactions.iloc[1:].reset_index(drop=True)
 
         # DEBUG: Show what columns we actually have
-        print(f"DEBUG: Columns after transformation: {list(transactions.columns)}")
+                # print(f"DEBUG: Columns after transformation: {list(transactions.columns)}")
 
         # DEBUG: Show actual date values from first few rows
-        print(f"DEBUG: First 5 date values (raw): {transactions.iloc[:5, 0].tolist()}")
-        print(f"DEBUG: Date column data type: {transactions.iloc[0, 0].__class__.__name__}")
+        # print(f"DEBUG: First 5 date values (raw): {transactions.iloc[:5, 0].tolist()}")
+        # print(f"DEBUG: Date column data type: {transactions.iloc[0, 0].__class__.__name__}")
 
         return metadata, transactions
     
@@ -160,11 +160,11 @@ class   ExcelTransactionMatcher:
                     # Found LC in narration row, need to find parent transaction row
                     parent_row = self.find_parent_transaction_row_with_formatting(ws, row)
                     if parent_row is not None:
-                        print(f"DEBUG: LC {lc} at narration row {row} linked to parent row {parent_row}")
+                        # print(f"DEBUG: LC {lc} at narration row {row} linked to parent row {parent_row}")
                         lc_numbers.append(lc)
                         lc_parent_rows.append(parent_row)
                     else:
-                        print(f"DEBUG: LC {lc} at narration row {row} - NO PARENT FOUND!")
+                        # print(f"DEBUG: LC {lc} at narration row {row} - NO PARENT FOUND!")
                         lc_numbers.append(None)
                         lc_parent_rows.append(None)
                 else:
@@ -222,13 +222,15 @@ class   ExcelTransactionMatcher:
                         # Convert Excel row to DataFrame index
                         df_index = parent_row - 9  # Excel row 9 = DataFrame index 0
                         if 0 <= df_index < total_rows:
-                            print(f"DEBUG: PO {po} at Excel row {excel_row} -> DataFrame index {df_index}")
+                            # print(f"DEBUG: PO {po} at Excel row {excel_row} -> DataFrame index {df_index}")
                             po_numbers[df_index] = po
                             po_parent_rows[df_index] = df_index
                         else:
-                            print(f"DEBUG: PO {po} at Excel row {excel_row} - INVALID DataFrame index {df_index}")
+                            # print(f"DEBUG: PO {po} at Excel row {excel_row} - INVALID DataFrame index {df_index}")
+                            pass
                     else:
-                        print(f"DEBUG: PO {po} at Excel row {excel_row} - NO PARENT FOUND!")
+                        # print(f"DEBUG: PO {po} at Excel row {excel_row} - NO PARENT FOUND!")
+                        pass
         
         wb.close()
         
@@ -439,26 +441,22 @@ class   ExcelTransactionMatcher:
     
     def find_potential_matches(self):
         """Find potential LC, PO, Interunit, and USD matches between the two files (sequential approach)."""
+
         transactions1, transactions2, _, _, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
         
         print("\n" + "="*60)
         print("STEP 1: NARRATION MATCHING (HIGHEST PRIORITY - Most reliable)")
         print("="*60)
         
-        # Initialize shared state for consistent Match IDs across all matching logic
-        shared_existing_matches = {}
-        shared_match_counter = 0
+        # ARCHITECTURAL FIX: Collect all matches first, then assign sequential Match IDs
+        print(f"\nMATCH ID SYSTEM: Post-processing sequential assignment")
+        print(f"Expected sequence: M001, M002, M003... assigned after all matches are found")
         
         # Step 1: Find Narration matches (HIGHEST PRIORITY - Most reliable)
+        print(f"\nSTEP 1: NARRATION MATCHING")
         narration_matches = self.narration_matching_logic.find_potential_matches(
-            transactions1, transactions2, shared_existing_matches, shared_match_counter
+            transactions1, transactions2, {}, None
         )
-        
-        # Update the shared counter after Narration matching
-        if narration_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in narration_matches)
-        
-        print(f"\nNarration Matching Results: {len(narration_matches)} matches found")
         
         # Step 2: Find LC matches on UNMATCHED records
         print("\n" + "="*60)
@@ -489,16 +487,13 @@ class   ExcelTransactionMatcher:
         print(f"File 1: {len(lc_numbers1_unmatched[lc_numbers1_unmatched.notna()])} unmatched LC numbers")
         print(f"File 2: {len(lc_numbers2_unmatched[lc_numbers2_unmatched.notna()])} unmatched LC numbers")
         
+        print(f"\nSTEP 2: LC MATCHING")
         lc_matches = self.lc_matching_logic.find_potential_matches(
             transactions1, transactions2, lc_numbers1_unmatched, lc_numbers2_unmatched,
-            shared_existing_matches, shared_match_counter
+            {}, None
         )
         
-        # Update the shared counter after LC matching
-        if lc_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in lc_matches)
-        
-        print(f"\nLC Matching Results: {len(lc_matches)} matches found")
+        # print(f"\nLC Matching Results: {len(lc_matches)} matches found")
         
         # Step 3: Find PO matches on UNMATCHED records
         print("\n" + "="*60)
@@ -530,16 +525,13 @@ class   ExcelTransactionMatcher:
         print(f"File 2: {len(po_numbers2_unmatched[po_numbers2_unmatched.notna()])} unmatched PO numbers")
         
         # Find PO matches on unmatched records with shared state
+        print(f"\nSTEP 3: PO MATCHING")
         po_matches = self.po_matching_logic.find_potential_matches(
             transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched,
-            shared_existing_matches, shared_match_counter
+            {}, None
         )
         
-        # Update the shared counter after PO matching
-        if po_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in po_matches)
-        
-        print(f"\nPO Matching Results: {len(po_matches)} matches found")
+        # print(f"\nPO Matching Results: {len(po_matches)} matches found")
         
         # Step 4: Find Interunit Loan matches on UNMATCHED records
         print("\n" + "="*60)
@@ -571,12 +563,13 @@ class   ExcelTransactionMatcher:
         print(f"File 2: {len(interunit_accounts2_unmatched[interunit_accounts2_unmatched.notna()])} unmatched interunit accounts")
         
         # Find interunit loan matches on unmatched records with shared state
+        print(f"\nSTEP 4: INTERUNIT MATCHING")
         interunit_matches = self.interunit_loan_matcher.find_potential_matches(
             transactions1, transactions2, interunit_accounts1_unmatched, interunit_accounts2_unmatched,
-            self.file1_path, self.file2_path, shared_existing_matches, shared_match_counter
+            self.file1_path, self.file2_path, {}, None
         )
         
-        print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
+        # print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
         
         # Step 5: Find USD matches on UNMATCHED records
         print("\n" + "="*60)
@@ -608,16 +601,13 @@ class   ExcelTransactionMatcher:
         print(f"File 2: {len(usd_amounts2_unmatched[usd_amounts2_unmatched.notna()])} unmatched USD amounts")
         
         # Find USD matches on unmatched records with shared state
+        print(f"\nSTEP 5: USD MATCHING")
         usd_matches = self.usd_matching_logic.find_potential_matches(
             transactions1, transactions2, usd_amounts1_unmatched, usd_amounts2_unmatched,
-            shared_existing_matches, shared_match_counter
+            {}, None
         )
         
-        # Update the shared counter after USD matching
-        if usd_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in usd_matches)
-        
-        print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
+        # print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
         
         # Step 6: Find Aggregated PO matches on UNMATCHED records
         print("\n" + "="*60)
@@ -649,21 +639,46 @@ class   ExcelTransactionMatcher:
         print(f"File 2: {len(po_numbers2_unmatched_for_aggregated[po_numbers2_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
         
         # Find aggregated PO matches on unmatched records with shared state
+        print(f"\nSTEP 6: AGGREGATED PO MATCHING")
         aggregated_po_matches = self.aggregated_po_matching_logic.find_potential_matches(
             transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
-            shared_existing_matches, shared_match_counter
+            {}, None
         )
         
-        # Update the shared counter after aggregated PO matching
-        if aggregated_po_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in aggregated_po_matches)
-        
-        print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
+        # print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
         
         # Combine all matches
         all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches + aggregated_po_matches
         
+        # ARCHITECTURAL FIX: Assign sequential Match IDs to all matches
+        print(f"\n=== ASSIGNING SEQUENTIAL MATCH IDs ===")
+        print(f"Total matches found: {len(all_matches)}")
+
+        
+        # Initialize Match ID counter
+        match_counter = 1
+        
+        # Assign sequential Match IDs to all matches
+        for i, match in enumerate(all_matches):
+            match_id = f"M{match_counter:03d}"  # Format as M001, M002, M003, etc.
+            old_match_id = match.get('match_id', 'None')
+            match['match_id'] = match_id
+            match_counter += 1
+            print(f"Match {i+1}: Assigned {match_id} to {match.get('Match_Type', 'Unknown')} match (was {old_match_id})")
+        
+        print(f"Assigned {len(all_matches)} sequential Match IDs (M001 to M{match_counter-1:03d})")
+        
+        # Sort matches by the newly assigned sequential Match IDs
+        all_matches.sort(key=lambda x: x['match_id'])
+        print(f"Sorted matches by sequential Match IDs")
+        
         print(f"\n" + "="*60)
+        print("FINAL MATCH SUMMARY")
+        print("="*60)
+        print(f"Total matches found: {len(all_matches)}")
+        print(f"Match IDs assigned: M001 to M{match_counter-1:03d}")
+        
+        print("="*60)
         print("FINAL RESULTS")
         print("="*60)
         print(f"Total Matches: {len(all_matches)}")
@@ -1034,6 +1049,13 @@ class   ExcelTransactionMatcher:
             print("No matches found. Cannot create matched files.")
             return
         
+        # Matches are already in sequential order from post-processing step
+        print(f"\n=== USING SEQUENTIALLY ASSIGNED MATCHES ===")
+        print(f"Total matches: {len(matches)}")
+        print(f"First 10 Match IDs: {[m['match_id'] for m in matches[:10]]}")
+
+        print(f"Last 10 Match IDs: {[m['match_id'] for m in matches[-10:]]}")
+        
         # Create file1 with new columns
         file1_matched = transactions1.copy()
         
@@ -1045,8 +1067,8 @@ class   ExcelTransactionMatcher:
         # Concatenate new columns with existing data
         file1_matched = pd.concat([match_id_col, audit_info_col, file1_matched, match_type_col], axis=1)
         
-        print(f"DEBUG: File1 DataFrame created with shape: {file1_matched.shape}")
-        print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
+        # print(f"DEBUG: File1 DataFrame created with shape: {file1_matched.shape}")
+        # print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
         
         # Create file2 with new columns
         file2_matched = transactions2.copy()
@@ -1059,27 +1081,27 @@ class   ExcelTransactionMatcher:
         # Concatenate new columns with existing data
         file2_matched = pd.concat([match_id_col2, audit_info_col2, file2_matched, match_type_col2], axis=1)
         
-        print(f"DEBUG: File2 DataFrame created with shape: {file2_matched.shape}")
-        print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
+        # print(f"DEBUG: File2 DataFrame created with shape: {file2_matched.shape}")
+        # print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
         
-        print(f"DEBUG: Added Match Type column to both DataFrames")
-        print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
-        print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
+        # print(f"DEBUG: Added Match Type column to both DataFrames")
+        # print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
+        # print(f"DEBUG: File2 columns: {list(file2_matched.columns)}")
         
         # Verify the new columns are actually there
-        print(f"DEBUG: File1 first few rows of Match ID column:")
-        print(file1_matched.iloc[:5, 0].tolist())
-        print(f"DEBUG: File1 first few rows of Audit Info column:")
-        print(file1_matched.iloc[:5, 1].tolist())
+        # print(f"DEBUG: File1 first few rows of Match ID column:")
+        # print(file1_matched.iloc[:5, 0].tolist())
+        # print(f"DEBUG: File1 first few rows of Audit Info column:")
+        # print(file1_matched.iloc[:5, 1].tolist())
         
         print(f"\n=== DEBUG: MATCH DATA POPULATION ===")
         
-        # Populate match information
-        for match in matches:
+        # Populate match information - process matches in sequential order
+        for i, match in enumerate(matches):
             match_id = match['match_id']  # Use the pre-assigned match ID
             audit_info = self.create_audit_info(match)
             
-            print(f"Match {match_id}:")
+
             # Use the explicit Match_Type field if available, otherwise fall back to inference
             if 'Match_Type' in match and match['Match_Type']:
                 match_type = match['Match_Type']
@@ -1111,11 +1133,15 @@ class   ExcelTransactionMatcher:
             file1_block_rows = self.block_identifier.get_transaction_block_rows(file1_row_idx, self.file1_path)
             print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID and Match Type, but Audit Info only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID and Match Type, but only if not already set (preserve first/lowest Match ID)
             for i, block_row in enumerate(file1_block_rows):
                 if 0 <= block_row < len(file1_matched):
-                    file1_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
-                    file1_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
+                    # Only set Match ID if not already set (preserve first/lowest Match ID)
+                    if pd.isna(file1_matched.iloc[block_row, 0]) or file1_matched.iloc[block_row, 0] == '':
+                        file1_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
+                        file1_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
+                    else:
+                        print(f"      WARNING: Row {block_row} already has Match ID {file1_matched.iloc[block_row, 0]}, preserving it instead of {match_id}")
                     
                     # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file1_block_rows) - 2:  # Second-to-last row
@@ -1136,11 +1162,15 @@ class   ExcelTransactionMatcher:
             file2_block_rows = self.block_identifier.get_transaction_block_rows(file2_row_idx, self.file2_path)
             print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
-            # Populate ALL rows of the transaction block with Match ID and Match Type, but Audit Info only in second-to-last row
+            # Populate ALL rows of the transaction block with Match ID and Match Type, but only if not already set (preserve first/lowest Match ID)
             for i, block_row in enumerate(file2_block_rows):
                 if 0 <= block_row < len(file2_matched):
-                    file2_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
-                    file2_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
+                    # Only set Match ID if not already set (preserve first/lowest Match ID)
+                    if pd.isna(file2_matched.iloc[block_row, 0]) or file2_matched.iloc[block_row, 0] == '':
+                        file2_matched.iloc[block_row, 0] = match_id  # Match ID column (index 0)
+                        file2_matched.iloc[block_row, -1] = match_type  # Match Type column (last column) - ALL ROWS
+                    else:
+                        print(f"      WARNING: Row {block_row} already has Match ID {file2_matched.iloc[block_row, 0]}, preserving it instead of {match_id}")
                     
                     # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file2_block_rows) - 2:  # Second-to-last row

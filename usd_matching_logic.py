@@ -23,7 +23,7 @@ class USDMatchingLogic:
         """
         self.block_identifier = block_identifier
     
-    def find_potential_matches(self, transactions1, transactions2, usd_amounts1, usd_amounts2, existing_matches=None, match_counter=0):
+    def find_potential_matches(self, transactions1, transactions2, usd_amounts1, usd_amounts2, existing_matches=None, match_id_manager=None):
         """Find potential USD amount matches between the two files."""
         # Filter rows with USD amounts
         usd_transactions1 = transactions1[usd_amounts1.notna()].copy()
@@ -38,8 +38,9 @@ class USDMatchingLogic:
         # Use shared state if provided, otherwise create new
         if existing_matches is None:
             existing_matches = {}
-        if match_counter is None:
-            match_counter = 0
+        if match_id_manager is None:
+            from match_id_manager import get_match_id_manager
+            match_id_manager = get_match_id_manager()
         
         print(f"\n=== USD MATCHING LOGIC ===")
         print(f"1. Check if lender debit and borrower credit amounts are EXACTLY the same")
@@ -97,24 +98,24 @@ class USDMatchingLogic:
                 
                 # STEP 1: Check if amounts are EXACTLY the same
                 if file1_amount != file2_amount:
-                    print(f"      ❌ REJECTED: Amounts don't match ({file1_amount} vs {file2_amount})")
+                    print(f"       REJECTED: Amounts don't match ({file1_amount} vs {file2_amount})")
                     continue
                 
-                print(f"      ✅ STEP 1 PASSED: Amounts match exactly")
+                print(f"       STEP 1 PASSED: Amounts match exactly")
                 
                 # STEP 2: Check if transaction types are opposite (one lender, one borrower)
                 if not ((file1_is_lender and file2_is_borrower) or (file1_is_borrower and file2_is_lender)):
-                    print(f"      ❌ REJECTED: Transaction types don't match (both same type)")
+                    print(f"       REJECTED: Transaction types don't match (both same type)")
                     continue
                 
-                print(f"      ✅ STEP 2 PASSED: Transaction types are opposite")
+                print(f"       STEP 2 PASSED: Transaction types are opposite")
                 
                 # STEP 3: Check if USD amounts match
                 if usd1 != usd2:
-                    print(f"      ❌ REJECTED: USD amounts don't match ('{usd1}' vs '{usd2}')")
+                    print(f"       REJECTED: USD amounts don't match ('{usd1}' vs '{usd2}')")
                     continue
                 
-                print(f"      ✅ STEP 3 PASSED: USD amounts match")
+                print(f"       STEP 3 PASSED: USD amounts match")
                 
                 # STEP 4: Check if both narrations have the same number of USD amounts
                 # Extract all USD amounts from both narrations
@@ -122,9 +123,9 @@ class USDMatchingLogic:
                 narration2 = str(header_row2.iloc[2]).upper()
                 
                 # DEBUG: Show what we're trying to match
-                print(f"      DEBUG: File 1 narration: {narration1[:100]}...")
-                print(f"      DEBUG: File 2 narration: {narration2[:100]}...")
-                print(f"      DEBUG: Using USD_PATTERN: {USD_PATTERN}")
+                # print(f"      DEBUG: File 1 narration: {narration1[:100]}...")
+                # print(f"      DEBUG: File 2 narration: {narration2[:100]}...")
+                # print(f"      DEBUG: Using USD_PATTERN: {USD_PATTERN}")
                 
                 usd_amounts_in_narration1 = re.findall(USD_PATTERN, narration1)
                 usd_amounts_in_narration2 = re.findall(USD_PATTERN, narration2)
@@ -134,18 +135,18 @@ class USDMatchingLogic:
                 
                 # FIX: If regex extraction fails, use the actual USD amounts that triggered the match
                 if not usd_amounts_in_narration1:
-                    print(f"      ⚠️  WARNING: Regex didn't find USD amounts in File 1 narration, using actual USD amount: {usd1}")
+                    print(f"      WARNING: Regex didn't find USD amounts in File 1 narration, using actual USD amount: {usd1}")
                     usd_amounts_in_narration1 = [usd1]
                 
                 if not usd_amounts_in_narration2:
-                    print(f"      ⚠️  WARNING: Regex didn't find USD amounts in File 2 narration, using actual USD amount: {usd2}")
+                    print(f"      WARNING: Regex didn't find USD amounts in File 2 narration, using actual USD amount: {usd2}")
                     usd_amounts_in_narration2 = [usd2]
                 
                 if len(usd_amounts_in_narration1) != len(usd_amounts_in_narration2):
-                    print(f"      ❌ REJECTED: Different number of USD amounts ({len(usd_amounts_in_narration1)} vs {len(usd_amounts_in_narration2)})")
+                    print(f"       REJECTED: Different number of USD amounts ({len(usd_amounts_in_narration1)} vs {len(usd_amounts_in_narration2)})")
                     continue
                 
-                print(f"      ✅ STEP 4 PASSED: Same number of USD amounts")
+                print(f"       STEP 4 PASSED: Same number of USD amounts")
                 
                 # STEP 5: Check if ALL USD amounts are identical between narrations
                 # Sort both lists to ensure order doesn't matter
@@ -153,28 +154,20 @@ class USDMatchingLogic:
                 sorted_usd2 = sorted(usd_amounts_in_narration2)
                 
                 if sorted_usd1 != sorted_usd2:
-                    print(f"      ❌ REJECTED: USD amounts don't match exactly")
+                    print(f"       REJECTED: USD amounts don't match exactly")
                     print(f"        File 1: {sorted_usd1}")
                     print(f"        File 2: {sorted_usd2}")
                     continue
                 
-                print(f"      ✅ STEP 5 PASSED: All USD amounts are identical")
+                print(f"       STEP 5 PASSED: All USD amounts are identical")
                 
                 # STEP 6: Check if we already have a match for this combination
-                match_key = (usd1, file1_amount)
+                # Generate next sequential Match ID using centralized manager
+                context = f"USD_{usd1}_File1_Row_{idx1}_File2_Row_{idx2}"
+                # Match ID will be assigned later in post-processing
+                match_id = None
                 
-                if match_key in existing_matches:
-                    # Use existing Match ID for consistency
-                    match_id = existing_matches[match_key]
-                    print(f"      🔄 REUSING existing Match ID: {match_id}")
-                else:
-                    # Create new Match ID
-                    match_counter += 1
-                    match_id = f"M{match_counter:03d}"
-                    existing_matches[match_key] = match_id
-                    print(f"      🆕 CREATING new Match ID: {match_id}")
-                
-                print(f"      🎉 ALL CRITERIA MET - USD MATCH FOUND!")
+                print(f"       ALL CRITERIA MET - USD MATCH FOUND!")
                 
                 # Create the match
                 matches.append({

@@ -70,7 +70,7 @@ class InterunitLoanMatcher:
         file1_path: str, 
         file2_path: str, 
         existing_matches: Dict = None, 
-        match_counter: int = 0
+        match_id_manager = None
     ) -> List[Dict]:
         """
         Find interunit loan matches between two transaction files.
@@ -95,8 +95,9 @@ class InterunitLoanMatcher:
         # Use shared state if provided, otherwise create new
         if existing_matches is None:
             existing_matches = {}
-        if match_counter is None:
-            match_counter = 0
+        if match_id_manager is None:
+            from match_id_manager import get_match_id_manager
+            match_id_manager = get_match_id_manager()
         
         print(f"\n=== INTERUNIT LOAN MATCHING LOGIC (CORRECTED) ===")
         print(f"1. Find full account numbers in ledger (of both files)")
@@ -139,8 +140,8 @@ class InterunitLoanMatcher:
                 if len(file2_interunit_data) <= 5:  # Show first 5
                     print(f"Block {i+1}: {len(block_data['ledger_accounts'])} ledger accounts, {len(block_data['narration_short_codes'])} short codes")
         
-        print(f"\n✓ File 1: {len(file1_interunit_data)} blocks with interunit data")
-        print(f"✓ File 2: {len(file2_interunit_data)} blocks with interunit data")
+        print(f"\nFile 1: {len(file1_interunit_data)} blocks with interunit data")
+        print(f"File 2: {len(file2_interunit_data)} blocks with interunit data")
         
         # Look for cross-referenced matches
         print(f"\n--- Looking for cross-referenced matches ---")
@@ -181,24 +182,16 @@ class InterunitLoanMatcher:
                                         file2_narration_contains = narration2['short_code']
                                         
                                         # We have a match! Check if we've already matched this combination
-                                        match_key = (amount1, file1_narration_contains, file2_narration_contains)
-                                        
-                                        if match_key in existing_matches:
-                                            # Use existing match ID for consistency
-                                            match_id = existing_matches[match_key]
-                                            print(f"  REUSING existing Match ID {match_id} for Amount {amount1}")
-                                        else:
-                                            # Create new match ID following CORE FORMAT
-                                            match_counter += 1
-                                            match_id = f"M{match_counter:03d}"  # M001, M002, M003... FOLLOWS CORE LOGIC
-                                            existing_matches[match_key] = match_id
-                                            print(f"  CREATING new Match ID {match_id} for Amount {amount1}")
+                                        # Generate next sequential Match ID using centralized manager
+                                        context = f"Interunit_{amount1}_File1_Block_{block1['block_index']}_File2_Block_{block2['block_index']}"
+                                        # Match ID will be assigned later in post-processing
+                                        match_id = None
                                         
                                         # Create match following CORE FORMAT exactly
                                         match = {
                                             'match_id': match_id,
                                             'Match_Type': 'Interunit',  # Add explicit match type
-                                            'Interunit_Account': f"{file1_narration_contains} ↔ {file2_narration_contains}",
+                                            'Interunit_Account': f"{file1_narration_contains} <-> {file2_narration_contains}",
                                             'File1_Index': block1['amounts']['row'],
                                             'File2_Index': block2['amounts']['row'],
                                             'File1_Debit': block1['amounts']['debit'],
@@ -211,7 +204,7 @@ class InterunitLoanMatcher:
                                         }
                                         
                                         matches.append(match)
-                                        print(f"  ✓ MATCH {match_id}: Amount {amount1}")
+                                        print(f"  MATCH {match_id}: Amount {amount1}")
                                         print(f"    Cross-reference: File 1 narration contains {file1_narration_contains}")
                                         print(f"    Cross-reference: File 2 narration contains {file2_narration_contains}")
                                         break
