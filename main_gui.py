@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QLabel, QPushButton, QProgressBar, QTextEdit,
     QFileDialog, QMessageBox, QGroupBox, QFrame, QSplitter,
     QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QStatusBar, QMenuBar, QMenu
+    QStatusBar
 )
 from PySide6.QtCore import (
     Qt, QThread, Signal, QTimer, QSize, QPropertyAnimation,
@@ -23,7 +23,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QFont, QPixmap, QIcon, QPalette, QColor, QDragEnterEvent,
-    QDropEvent, QPainter, QPen, QAction
+    QDropEvent, QPainter, QPen
 )
 
 # Import existing matching logic
@@ -276,7 +276,7 @@ class FileSelectionWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(5)
         
         # Create section container with curved box
         section_container = QWidget()
@@ -488,7 +488,7 @@ class ProcessingWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(5)
         
         # Create section container with curved box
         section_container = QWidget()
@@ -519,7 +519,7 @@ class ProcessingWidget(QWidget):
         
         for step in steps:
             step_layout = QHBoxLayout()
-            step_layout.setSpacing(10)
+            step_layout.setSpacing(5)
             
             # Step name
             step_label = QLabel(f"{step}")
@@ -613,7 +613,7 @@ class ResultsWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(5)
         
         # Create section container with curved box
         section_container = QWidget()
@@ -629,66 +629,50 @@ class ResultsWidget(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
-        # Results summary - show all match types
-        # First row
-        first_row_layout = QHBoxLayout()
-        first_row_layout.setSpacing(15)
+        # Results summary - all match types and total in one row
+        single_row_layout = QHBoxLayout()
+        single_row_layout.setSpacing(5)
         
-        # Narration Matches box
+        # Narration Matches - bold text style
         self.narration_matches_label = QLabel("Narration: 0")
-        self.narration_matches_label.setProperty("class", "match-summary-item")
-        self.narration_matches_label.setMinimumSize(100, 30)
-        first_row_layout.addWidget(self.narration_matches_label)
+        self.narration_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.narration_matches_label)
         
-        # LC Matches box
+        # LC Matches - bold text style
         self.lc_matches_label = QLabel("LC: 0")
-        self.lc_matches_label.setProperty("class", "match-summary-item")
-        self.lc_matches_label.setMinimumSize(100, 30)
-        first_row_layout.addWidget(self.lc_matches_label)
+        self.lc_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.lc_matches_label)
         
-        # PO Matches box
+        # PO Matches - bold text style
         self.po_matches_label = QLabel("PO: 0")
-        self.po_matches_label.setProperty("class", "match-summary-item")
-        self.po_matches_label.setMinimumSize(100, 30)
-        first_row_layout.addWidget(self.po_matches_label)
+        self.po_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.po_matches_label)
         
-        section_layout.addLayout(first_row_layout)
-        
-        # Second row
-        second_row_layout = QHBoxLayout()
-        second_row_layout.setSpacing(15)
-        
-        # Interunit Matches box
+        # Interunit Matches - bold text style
         self.interunit_matches_label = QLabel("Interunit: 0")
-        self.interunit_matches_label.setProperty("class", "match-summary-item")
-        self.interunit_matches_label.setMinimumSize(100, 30)
-        second_row_layout.addWidget(self.interunit_matches_label)
+        self.interunit_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.interunit_matches_label)
         
-        # USD Matches box
+        # USD Matches - bold text style
         self.usd_matches_label = QLabel("USD: 0")
-        self.usd_matches_label.setProperty("class", "match-summary-item")
-        self.usd_matches_label.setMinimumSize(100, 30)
-        second_row_layout.addWidget(self.usd_matches_label)
+        self.usd_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.usd_matches_label)
         
-        # One-to-Many PO Matches box
+        # One-to-Many PO Matches - bold text style
         self.aggregated_po_matches_label = QLabel("One-to-Many PO: 0")
-        self.aggregated_po_matches_label.setProperty("class", "match-summary-item")
-        self.aggregated_po_matches_label.setMinimumSize(120, 30)
-        second_row_layout.addWidget(self.aggregated_po_matches_label)
+        self.aggregated_po_matches_label.setProperty("class", "match-summary-text")
+        single_row_layout.addWidget(self.aggregated_po_matches_label)
         
-        section_layout.addLayout(second_row_layout)
+        # Add some spacing before total
+        single_row_layout.addStretch(1)
         
-        # Total Matches box (larger, centered)
-        total_layout = QHBoxLayout()
-        total_layout.addStretch()
-        
+        # Total Matches box - smaller height but keeps current style
         self.total_matches_label = QLabel("Total Matches: 0")
         self.total_matches_label.setProperty("class", "total-match-summary")
-        self.total_matches_label.setMinimumSize(150, 40)
-        total_layout.addWidget(self.total_matches_label)
+        self.total_matches_label.setMinimumSize(150, 30)
+        single_row_layout.addWidget(self.total_matches_label)
         
-        total_layout.addStretch()
-        section_layout.addLayout(total_layout)
+        section_layout.addLayout(single_row_layout)
         
         # Add stretch to push content to top (consistent with other sections)
         section_layout.addStretch()
@@ -755,7 +739,7 @@ class LogWidget(QWidget):
         # Log text area
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
+        self.log_text.setMaximumHeight(200)
         self.log_text.setProperty("class", "log-text")
         section_layout.addWidget(self.log_text)
         
@@ -803,12 +787,12 @@ class MainWindow(QMainWindow):
         
         # Create main layout
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(5)
         main_layout.setContentsMargins(10, 10, 10, 10)
         
         # Top row: File selection and Match steps side by side
         top_row = QHBoxLayout()
-        top_row.setSpacing(10)
+        top_row.setSpacing(5)
         
         # File selection widget (left) - equal width
         self.file_selection = FileSelectionWidget()
@@ -825,24 +809,15 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(top_row)
         
-        # Bottom row: Match Summary and Process Log side by side
-        bottom_row = QHBoxLayout()
-        bottom_row.setSpacing(10)
-        
-        # Results widget (left) - equal width
+        # Match Summary section - full width
         self.results_widget = ResultsWidget()
-        bottom_row.addWidget(self.results_widget, 1)  # Equal stretch factor
+        main_layout.addWidget(self.results_widget)
         
-        # Log widget (right) - equal width
+        # Process Log section - full width
         self.log_widget = LogWidget()
-        bottom_row.addWidget(self.log_widget, 1)  # Equal stretch factor
-        
-        main_layout.addLayout(bottom_row)
+        main_layout.addWidget(self.log_widget)
         
         central_widget.setLayout(main_layout)
-        
-        # Create menu bar
-        self.create_menu_bar()
         
         # Create status bar
         self.status_bar = QStatusBar()
@@ -854,32 +829,6 @@ class MainWindow(QMainWindow):
         
         # Add initial log message
         self.log_widget.add_log("Application started. Please select Excel files to begin.")
-    
-    def create_menu_bar(self):
-        """Create the menu bar"""
-        menubar = self.menuBar()
-        
-        # File menu
-        file_menu = menubar.addMenu('File')
-        
-        open_action = QAction('Open Files...', self)
-        open_action.setShortcut('Ctrl+O')
-        open_action.triggered.connect(self.open_files_dialog)
-        file_menu.addAction(open_action)
-        
-        file_menu.addSeparator()
-        
-        exit_action = QAction('Exit', self)
-        exit_action.setShortcut('Ctrl+Q')
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-        
-        # Help menu
-        help_menu = menubar.addMenu('Help')
-        
-        about_action = QAction('About', self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
     
     def apply_styling(self):
         """Apply styling to match the reference image exactly"""
@@ -903,7 +852,7 @@ class MainWindow(QMainWindow):
                 background-color: white;
                 border: 1px solid #e1e5e9;
                 border-radius: 8px;
-                margin: 8px;
+                margin: 0px;
             }
             
             /* Bootstrap btn-sm - Primary Button */
@@ -1014,25 +963,21 @@ class MainWindow(QMainWindow):
                 border-radius: 3px;
             }
             
-            /* Match Summary Items */
-            QLabel[class="match-summary-item"] {
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                background-color: #f8f9fa;
-                padding: 6px 10px;
+            /* Match Summary Text Items - bold text style */
+            QLabel[class="match-summary-text"] {
                 color: #495057;
-                font-weight: 500;
-                font-size: 12px;
-                text-align: center;
+                font-weight: bold;
+                font-size: 13px;
                 font-family: "Segoe UI";
+                padding: 2px 0px;
             }
             
-            /* Total Match Summary */
+            /* Total Match Summary - smaller height */
             QLabel[class="total-match-summary"] {
                 border: 2px solid #28a745;
                 border-radius: 6px;
                 background-color: #d4edda;
-                padding: 8px 16px;
+                padding: 4px 12px;
                 color: #155724;
                 font-weight: 600;
                 font-size: 14px;
@@ -1073,35 +1018,6 @@ class MainWindow(QMainWindow):
                 color: #6c757d;
             }
             
-            /* Menu Bar */
-            QMenuBar {
-                background-color: #343a40;
-                color: white;
-                border: none;
-                padding: 4px;
-            }
-            QMenuBar::item {
-                background-color: transparent;
-                padding: 8px 12px;
-                border-radius: 4px;
-            }
-            QMenuBar::item:selected {
-                background-color: #495057;
-            }
-            QMenu {
-                background-color: white;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected {
-                background-color: #e9ecef;
-            }
-            
             /* Status Bar */
             QStatusBar {
                 background-color: #f8f9fa;
@@ -1116,11 +1032,6 @@ class MainWindow(QMainWindow):
         self.current_file2 = file2_path
         self.log_widget.add_log(f"Files selected: {os.path.basename(file1_path)} and {os.path.basename(file2_path)}")
         self.status_bar.showMessage(f"Files ready: {os.path.basename(file1_path)} & {os.path.basename(file2_path)}")
-    
-    def open_files_dialog(self):
-        """Open file selection dialog"""
-        # This would trigger the file selection widget's browse buttons
-        pass
     
     def start_matching(self):
         """Start the matching process"""
@@ -1209,13 +1120,6 @@ class MainWindow(QMainWindow):
             os.startfile(str(output_path))
         else:
             QMessageBox.warning(self, "Folder Not Found", f"Output folder not found: {OUTPUT_FOLDER}")
-    
-    def show_about(self):
-        """Show about dialog"""
-        QMessageBox.about(self, "About Interunit Loan Matcher", 
-                         "Interunit Loan Matcher GUI v1.0\n\n"
-                         "Automated Excel transaction matching tool\n"
-                         "Built with PyQt6")
     
     def closeEvent(self, event):
         """Handle application close event"""
