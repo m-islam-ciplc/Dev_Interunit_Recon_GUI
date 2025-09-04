@@ -14,8 +14,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QGridLayout, QLabel, QPushButton, QProgressBar, QTextEdit,
     QFileDialog, QMessageBox, QGroupBox, QFrame, QSplitter,
-    QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QStatusBar
+    QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PySide6.QtCore import (
     Qt, QThread, Signal, QTimer, QSize, QPropertyAnimation,
@@ -282,7 +281,7 @@ class FileSelectionWidget(QWidget):
         section_container = QWidget()
         section_container.setProperty("class", "section-container")
         section_layout = QVBoxLayout()
-        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_layout.setContentsMargins(15, 15, 15, 15)  # Add padding inside container
         section_container.setLayout(section_layout)
         
         # Title
@@ -302,7 +301,7 @@ class FileSelectionWidget(QWidget):
         # Selected files section
         files_label = QLabel("Selected Ledgers:")
         files_label.setProperty("class", "heading")
-        files_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
+        files_label.setStyleSheet("margin-bottom: 5px;")
         files_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(files_label)
         
@@ -494,7 +493,7 @@ class ProcessingWidget(QWidget):
         section_container = QWidget()
         section_container.setProperty("class", "section-container")
         section_layout = QVBoxLayout()
-        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_layout.setContentsMargins(15, 15, 15, 15)  # Add padding inside container
         section_container.setLayout(section_layout)
         
         # Title
@@ -548,7 +547,7 @@ class ProcessingWidget(QWidget):
         # Overall progress section
         overall_label = QLabel("Overall Progress:")
         overall_label.setProperty("class", "heading")
-        overall_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
+        overall_label.setStyleSheet("margin-bottom: 10px;")
         overall_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(overall_label)
         
@@ -619,7 +618,7 @@ class ResultsWidget(QWidget):
         section_container = QWidget()
         section_container.setProperty("class", "section-container")
         section_layout = QVBoxLayout()
-        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_layout.setContentsMargins(15, 15, 15, 15)  # Add padding inside container
         section_container.setLayout(section_layout)
         
         # Title
@@ -726,13 +725,13 @@ class LogWidget(QWidget):
         section_container = QWidget()
         section_container.setProperty("class", "section-container")
         section_layout = QVBoxLayout()
-        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_layout.setContentsMargins(15, 15, 15, 15)  # Add padding inside container
         section_container.setLayout(section_layout)
         
         # Title
         title = QLabel("Process Log:")
         title.setProperty("class", "heading")
-        title.setStyleSheet("margin-bottom: 5px;")
+        title.setStyleSheet("margin-bottom: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
@@ -818,11 +817,6 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.log_widget)
         
         central_widget.setLayout(main_layout)
-        
-        # Create status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
         
         # Apply styling
         self.apply_styling()
@@ -1018,12 +1012,6 @@ class MainWindow(QMainWindow):
                 color: #6c757d;
             }
             
-            /* Status Bar */
-            QStatusBar {
-                background-color: #f8f9fa;
-                border-top: 1px solid #dee2e6;
-                color: #495057;
-            }
         """)
     
     def on_files_selected(self, file1_path: str, file2_path: str):
@@ -1031,7 +1019,6 @@ class MainWindow(QMainWindow):
         self.current_file1 = file1_path
         self.current_file2 = file2_path
         self.log_widget.add_log(f"Files selected: {os.path.basename(file1_path)} and {os.path.basename(file2_path)}")
-        self.status_bar.showMessage(f"Files ready: {os.path.basename(file1_path)} & {os.path.basename(file2_path)}")
     
     def start_matching(self):
         """Start the matching process"""
@@ -1052,8 +1039,6 @@ class MainWindow(QMainWindow):
         self.matching_thread.matching_finished.connect(self.on_matching_finished)
         self.matching_thread.error_occurred.connect(self.on_matching_error)
         self.matching_thread.start()
-        
-        self.status_bar.showMessage("Processing...")
     
     def update_overall_progress(self, step: int, status: str, matches_found: int):
         """Update overall progress bar"""
@@ -1067,7 +1052,6 @@ class MainWindow(QMainWindow):
             self.matching_thread.wait()
             self.log_widget.add_log("Matching process cancelled by user.")
             self.processing_widget.set_processing_state(False)
-            self.status_bar.showMessage("Cancelled")
     
     def on_matching_finished(self, matches: list, statistics: dict):
         """Handle matching completion"""
@@ -1076,14 +1060,12 @@ class MainWindow(QMainWindow):
         self.processing_widget.set_processing_state(False)
         
         self.log_widget.add_log(f"Matching completed successfully! Found {statistics['total_matches']} matches.")
-        self.status_bar.showMessage(f"Completed - {statistics['total_matches']} matches found")
     
     def on_matching_error(self, error_message: str):
         """Handle matching errors"""
         self.processing_widget.set_processing_state(False)
         self.log_widget.add_log(f"Error: {error_message}")
         QMessageBox.critical(self, "Matching Error", f"An error occurred during matching:\n\n{error_message}")
-        self.status_bar.showMessage("Error occurred")
     
     def export_files(self):
         """Export matched files"""
