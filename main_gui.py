@@ -289,6 +289,7 @@ class FileSelectionWidget(QWidget):
         title = QLabel("Select Interunit Loan Ledgers:")
         title.setProperty("class", "heading")
         title.setStyleSheet("margin-bottom: 10px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
         # Browse button
@@ -302,6 +303,7 @@ class FileSelectionWidget(QWidget):
         files_label = QLabel("Selected Ledgers:")
         files_label.setProperty("class", "heading")
         files_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
+        files_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(files_label)
         
         # File list container - static height for 2 files
@@ -330,8 +332,6 @@ class FileSelectionWidget(QWidget):
         section_layout.addWidget(self.run_match_button)
         
         
-        # Add stretch to push everything to top
-        section_layout.addStretch()
         
         # Add section container to main layout
         layout.addWidget(section_container)
@@ -401,12 +401,14 @@ class FileSelectionWidget(QWidget):
             file1_name = os.path.basename(self.file1_path)
             file1_item = QLabel(f"✓ {file1_name}")
             file1_item.setProperty("class", "file-item")
+            file1_item.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             layout.addWidget(file1_item)
         
         if self.file2_path:
             file2_name = os.path.basename(self.file2_path)
             file2_item = QLabel(f"✓ {file2_name}")
             file2_item.setProperty("class", "file-item")
+            file2_item.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             layout.addWidget(file2_item)
         
         # Enable/disable Run Match button
@@ -499,6 +501,7 @@ class ProcessingWidget(QWidget):
         title = QLabel("Match Steps")
         title.setProperty("class", "heading")
         title.setStyleSheet("margin-bottom: 10px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
         # Step progress
@@ -522,6 +525,7 @@ class ProcessingWidget(QWidget):
             step_label = QLabel(f"{step}")
             step_label.setMinimumWidth(120)
             step_label.setFont(QFont("Segoe UI", 10))
+            step_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             step_layout.addWidget(step_label)
             
             # Step progress bar
@@ -538,8 +542,21 @@ class ProcessingWidget(QWidget):
             self.step_labels[step] = step_label
             self.step_progresses[step] = step_progress
         
-        # Add stretch to push everything to top
-        section_layout.addStretch()
+        # Add some spacing before overall progress
+        section_layout.addSpacing(10)
+        
+        # Overall progress section
+        overall_label = QLabel("Overall Progress:")
+        overall_label.setProperty("class", "heading")
+        overall_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
+        overall_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        section_layout.addWidget(overall_label)
+        
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setRange(0, 100)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setProperty("class", "overall-progress")
+        section_layout.addWidget(self.overall_progress)
         
         # Add section container to main layout
         layout.addWidget(section_container)
@@ -609,6 +626,7 @@ class ResultsWidget(QWidget):
         title = QLabel("Match Summary")
         title.setProperty("class", "heading")
         title.setStyleSheet("margin-bottom: 10px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
         # Results summary - matching the image layout
@@ -629,7 +647,7 @@ class ResultsWidget(QWidget):
         
         section_layout.addLayout(summary_layout)
         
-        # Add stretch to push everything to top
+        # Add stretch to push content to top (consistent with other sections)
         section_layout.addStretch()
         
         # Add section container to main layout
@@ -670,6 +688,7 @@ class LogWidget(QWidget):
         title = QLabel("Process Log:")
         title.setProperty("class", "heading")
         title.setStyleSheet("margin-bottom: 5px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
         # Log text area
@@ -678,6 +697,9 @@ class LogWidget(QWidget):
         self.log_text.setMaximumHeight(150)
         self.log_text.setProperty("class", "log-text")
         section_layout.addWidget(self.log_text)
+        
+        # Add stretch to push content to top (consistent with other sections)
+        section_layout.addStretch()
         
         # Add section container to main layout
         layout.addWidget(section_container)
@@ -720,12 +742,12 @@ class MainWindow(QMainWindow):
         
         # Create main layout
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         
         # Top row: File selection and Match steps side by side
         top_row = QHBoxLayout()
-        top_row.setSpacing(20)
+        top_row.setSpacing(10)
         
         # File selection widget (left) - equal width
         self.file_selection = FileSelectionWidget()
@@ -737,22 +759,14 @@ class MainWindow(QMainWindow):
         self.processing_widget = ProcessingWidget()
         top_row.addWidget(self.processing_widget, 1)  # Equal stretch factor
         
+        # Get reference to overall progress bar from processing widget
+        self.overall_progress = self.processing_widget.overall_progress
+        
         main_layout.addLayout(top_row)
-        
-        # Overall progress bar
-        overall_label = QLabel("Overall Progress:")
-        overall_label.setProperty("class", "heading")
-        main_layout.addWidget(overall_label)
-        
-        self.overall_progress = QProgressBar()
-        self.overall_progress.setRange(0, 100)
-        self.overall_progress.setValue(0)
-        self.overall_progress.setProperty("class", "overall-progress")
-        main_layout.addWidget(self.overall_progress)
         
         # Bottom row: Match Summary and Process Log side by side
         bottom_row = QHBoxLayout()
-        bottom_row.setSpacing(20)
+        bottom_row.setSpacing(10)
         
         # Results widget (left) - equal width
         self.results_widget = ResultsWidget()
