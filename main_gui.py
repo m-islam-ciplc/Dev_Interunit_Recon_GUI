@@ -294,7 +294,7 @@ class FileSelectionWidget(QWidget):
         # Browse button
         self.browse_button = QPushButton("Browse Ledgers")
         self.browse_button.setProperty("class", "browse-button")
-        self.browse_button.setMinimumSize(100, 24)
+        self.browse_button.setMinimumSize(80, 20)
         self.browse_button.clicked.connect(self.select_both_files)
         section_layout.addWidget(self.browse_button)
         
@@ -304,29 +304,31 @@ class FileSelectionWidget(QWidget):
         files_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
         section_layout.addWidget(files_label)
         
-        # File list container
+        # File list container - static height for 2 files
         self.files_container = QWidget()
         self.files_container.setProperty("class", "files-list")
+        self.files_container.setFixedHeight(80)  # Increased height for better visibility
         files_layout = QVBoxLayout()
-        files_layout.setContentsMargins(0, 0, 0, 0)
-        files_layout.setSpacing(2)
+        files_layout.setContentsMargins(8, 8, 8, 8)
+        files_layout.setSpacing(6)  # Increased spacing between files
         self.files_container.setLayout(files_layout)
         section_layout.addWidget(self.files_container)
         
         # Clear button
         self.clear_files_button = QPushButton("Clear Ledgers")
         self.clear_files_button.setProperty("class", "clear-button")
-        self.clear_files_button.setMinimumSize(90, 24)
+        self.clear_files_button.setMinimumSize(70, 20)
         self.clear_files_button.clicked.connect(self.clear_files)
         section_layout.addWidget(self.clear_files_button)
         
         # Run Match button
         self.run_match_button = QPushButton("Run Match")
         self.run_match_button.setProperty("class", "run-button")
-        self.run_match_button.setMinimumSize(90, 28)
+        self.run_match_button.setMinimumSize(70, 24)
         self.run_match_button.clicked.connect(self.run_matching)
         self.run_match_button.setEnabled(False)
         section_layout.addWidget(self.run_match_button)
+        
         
         # Add stretch to push everything to top
         section_layout.addStretch()
@@ -374,8 +376,6 @@ class FileSelectionWidget(QWidget):
         self.file1_path = ""
         self.file2_path = ""
         self.update_file_display()
-        self.validation_label.setText("Please select both files")
-        self.validation_label.setProperty("class", "status-warning")
             
     def set_file(self, file_num: int, file_path: str):
         """Set the selected file path"""
@@ -396,16 +396,16 @@ class FileSelectionWidget(QWidget):
             if child.widget():
                 child.widget().deleteLater()
         
-        # Add current files with actual filenames
+        # Add current files with tick icons and actual filenames
         if self.file1_path:
             file1_name = os.path.basename(self.file1_path)
-            file1_item = QLabel(file1_name)
+            file1_item = QLabel(f"✓ {file1_name}")
             file1_item.setProperty("class", "file-item")
             layout.addWidget(file1_item)
         
         if self.file2_path:
             file2_name = os.path.basename(self.file2_path)
-            file2_item = QLabel(file2_name)
+            file2_item = QLabel(f"✓ {file2_name}")
             file2_item.setProperty("class", "file-item")
             layout.addWidget(file2_item)
         
@@ -432,15 +432,7 @@ class FileSelectionWidget(QWidget):
                 (self.file1_path.endswith('.xlsx') or self.file1_path.endswith('.xls')) and
                 (self.file2_path.endswith('.xlsx') or self.file2_path.endswith('.xls'))):
                 
-                self.validation_label.setText("✓ Files validated successfully")
-                self.validation_label.setProperty("class", "status-success")
                 self.files_selected.emit(self.file1_path, self.file2_path)
-            else:
-                self.validation_label.setText("✗ Invalid files selected")
-                self.validation_label.setProperty("class", "status-error")
-        else:
-            self.validation_label.setText("Please select both files")
-            self.validation_label.setProperty("class", "status-warning")
     
     def dragEnterEvent(self, event: QDragEnterEvent):
         """Handle drag enter event"""
@@ -514,8 +506,12 @@ class ProcessingWidget(QWidget):
         self.step_progresses = {}
         
         steps = [
-            "Narration Match",
-            "LC Match"
+            "Narration",
+            "LC",
+            "PO",
+            "Interunit",
+            "USD",
+            "One-to-Many PO"
         ]
         
         for step in steps:
@@ -525,7 +521,7 @@ class ProcessingWidget(QWidget):
             # Step name
             step_label = QLabel(f"{step}")
             step_label.setMinimumWidth(120)
-            step_label.setFont(QFont("Arial", 10))
+            step_label.setFont(QFont("Segoe UI", 10))
             step_layout.addWidget(step_label)
             
             # Step progress bar
@@ -536,16 +532,11 @@ class ProcessingWidget(QWidget):
             step_progress.setProperty("class", "step-progress")
             step_layout.addWidget(step_progress)
             
-            # Step status
-            step_status = QLabel("0%")
-            step_status.setMinimumWidth(40)
-            step_status.setFont(QFont("Arial", 10))
-            step_layout.addWidget(step_status)
             
             section_layout.addLayout(step_layout)
             
             self.step_labels[step] = step_label
-            self.step_progresses[step] = (step_progress, step_status)
+            self.step_progresses[step] = step_progress
         
         # Add stretch to push everything to top
         section_layout.addStretch()
@@ -564,17 +555,19 @@ class ProcessingWidget(QWidget):
         """Mark a step as completed"""
         # Map full step names to short names
         step_mapping = {
-            "Narration Matching": "Narration Match",
-            "LC Matching": "LC Match"
+            "Narration Matching": "Narration",
+            "LC Matching": "LC",
+            "PO Matching": "PO",
+            "Interunit Matching": "Interunit",
+            "USD Matching": "USD",
+            "Aggregated PO Matching": "One-to-Many PO"
         }
         
         short_name = step_mapping.get(step_name, step_name)
         
         if short_name in self.step_progresses:
-            progress_bar, status_label = self.step_progresses[short_name]
+            progress_bar = self.step_progresses[short_name]
             progress_bar.setValue(100)
-            status_label.setText("100%")
-            status_label.setProperty("class", "status-success")
             
             # Also update the step label to show completion
             if short_name in self.step_labels:
@@ -582,10 +575,8 @@ class ProcessingWidget(QWidget):
     
     def reset_progress(self):
         """Reset all progress indicators"""
-        for step_name, (progress_bar, status_label) in self.step_progresses.items():
+        for step_name, progress_bar in self.step_progresses.items():
             progress_bar.setValue(0)
-            status_label.setText("0%")
-            status_label.setProperty("class", "step-pending")
             
             # Reset step label styling
             if step_name in self.step_labels:
@@ -840,57 +831,60 @@ class MainWindow(QMainWindow):
                 margin: 8px;
             }
             
-            /* Primary Button - Windows Dialog Style */
+            /* Bootstrap btn-sm - Primary Button */
             QPushButton[class="browse-button"] {
-                background-color: #0078D4;
+                background-color: #007bff;
                 color: white;
                 border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-family: "Segoe UI";
                 font-weight: 600;
-                font-size: 12px;
-                min-height: 32px;
-                min-width: 80px;
+                font-size: 14px;
+                min-height: 20px;
+                min-width: 60px;
             }
             QPushButton[class="browse-button"]:hover {
-                background-color: #106EBE;
+                background-color: #0056b3;
             }
             
-            /* Secondary Button - Windows Dialog Style */
+            /* Bootstrap btn-sm - Secondary Button */
             QPushButton[class="clear-button"] {
                 background-color: white;
-                color: #323130;
-                border: 1px solid #8A8886;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: 400;
-                font-size: 12px;
-                min-height: 32px;
-                min-width: 80px;
+                color: #6c757d;
+                border: 1px solid #6c757d;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-family: "Segoe UI";
+                font-weight: 600;
+                font-size: 14px;
+                min-height: 20px;
+                min-width: 60px;
             }
             QPushButton[class="clear-button"]:hover {
-                background-color: #F3F2F1;
-                border-color: #605E5C;
+                background-color: #6c757d;
+                color: white;
             }
             
-            /* Primary Action Button - Windows Dialog Style */
+            /* Bootstrap btn-sm - Primary Action Button */
             QPushButton[class="run-button"] {
-                background-color: #0078D4;
+                background-color: #007bff;
                 color: white;
                 border: none;
-                border-radius: 4px;
-                padding: 10px 20px;
+                border-radius: 3px;
+                padding: 6px 12px;
+                font-family: "Segoe UI";
                 font-weight: 600;
-                font-size: 12px;
-                min-height: 36px;
-                min-width: 90px;
+                font-size: 14px;
+                min-height: 24px;
+                min-width: 70px;
             }
             QPushButton[class="run-button"]:hover {
-                background-color: #106EBE;
+                background-color: #0056b3;
             }
             QPushButton[class="run-button"]:disabled {
-                background-color: #A19F9D;
-                color: #C8C6C4;
+                background-color: #6c757d;
+                color: #adb5bd;
             }
             
             /* Files List */
@@ -904,12 +898,13 @@ class MainWindow(QMainWindow):
             
             /* File Item */
             QLabel[class="file-item"] {
-                padding: 4px 8px;
+                padding: 2px 4px;
                 margin: 1px 0;
                 background-color: transparent;
                 color: #495057;
-                font-style: italic;
-                font-size: 11px;
+                font-family: "Segoe UI";
+                font-size: 14px;
+                font-weight: 400;
             }
             
             /* Step Progress Bars - Orange */
