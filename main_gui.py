@@ -276,100 +276,153 @@ class FileSelectionWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(10)
+        
+        # Create section container with curved box
+        section_container = QWidget()
+        section_container.setProperty("class", "section-container")
+        section_layout = QVBoxLayout()
+        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Select Excel Files for Matching")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        title = QLabel("Select Interunit Loan Ledgers:")
+        title.setProperty("class", "heading")
+        title.setStyleSheet("margin-bottom: 10px;")
+        section_layout.addWidget(title)
         
-        # File selection grid
-        grid = QGridLayout()
+        # Browse button
+        self.browse_button = QPushButton("Browse Ledgers")
+        self.browse_button.setProperty("class", "browse-button")
+        self.browse_button.setMinimumSize(100, 24)
+        self.browse_button.clicked.connect(self.select_both_files)
+        section_layout.addWidget(self.browse_button)
         
-        # File 1
-        self.file1_label = QLabel("File 1 (Pole Book):")
-        self.file1_display = QLabel("No file selected")
-        self.file1_display.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ccc;
-                padding: 20px;
-                background-color: #f9f9f9;
-                border-radius: 5px;
-            }
-        """)
-        self.file1_button = QPushButton("Browse...")
-        self.file1_button.clicked.connect(lambda: self.select_file(1))
+        # Selected files section
+        files_label = QLabel("Selected Ledgers:")
+        files_label.setProperty("class", "heading")
+        files_label.setStyleSheet("margin-top: 15px; margin-bottom: 5px;")
+        section_layout.addWidget(files_label)
         
-        grid.addWidget(self.file1_label, 0, 0)
-        grid.addWidget(self.file1_display, 1, 0)
-        grid.addWidget(self.file1_button, 1, 1)
+        # File list container
+        self.files_container = QWidget()
+        self.files_container.setProperty("class", "files-list")
+        files_layout = QVBoxLayout()
+        files_layout.setContentsMargins(0, 0, 0, 0)
+        files_layout.setSpacing(2)
+        self.files_container.setLayout(files_layout)
+        section_layout.addWidget(self.files_container)
         
-        # File 2
-        self.file2_label = QLabel("File 2 (Steel Book):")
-        self.file2_display = QLabel("No file selected")
-        self.file2_display.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ccc;
-                padding: 20px;
-                background-color: #f9f9f9;
-                border-radius: 5px;
-            }
-        """)
-        self.file2_button = QPushButton("Browse...")
-        self.file2_button.clicked.connect(lambda: self.select_file(2))
+        # Clear button
+        self.clear_files_button = QPushButton("Clear Ledgers")
+        self.clear_files_button.setProperty("class", "clear-button")
+        self.clear_files_button.setMinimumSize(90, 24)
+        self.clear_files_button.clicked.connect(self.clear_files)
+        section_layout.addWidget(self.clear_files_button)
         
-        grid.addWidget(self.file2_label, 2, 0)
-        grid.addWidget(self.file2_display, 3, 0)
-        grid.addWidget(self.file2_button, 3, 1)
+        # Run Match button
+        self.run_match_button = QPushButton("Run Match")
+        self.run_match_button.setProperty("class", "run-button")
+        self.run_match_button.setMinimumSize(90, 28)
+        self.run_match_button.clicked.connect(self.run_matching)
+        self.run_match_button.setEnabled(False)
+        section_layout.addWidget(self.run_match_button)
         
-        layout.addLayout(grid)
+        # Add stretch to push everything to top
+        section_layout.addStretch()
         
-        # Validation status
-        self.validation_label = QLabel("")
-        self.validation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.validation_label)
+        # Add section container to main layout
+        layout.addWidget(section_container)
         
         self.setLayout(layout)
         self.setAcceptDrops(True)
         
-    def select_file(self, file_num: int):
-        """Open file dialog to select Excel file"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, 
-            f"Select File {file_num}",
+    
+    def select_both_files(self):
+        """Open file dialog to select both files at once"""
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Both Excel Files",
             "",
             "Excel Files (*.xlsx *.xls);;All Files (*)"
         )
         
-        if file_path:
-            self.set_file(file_num, file_path)
+        if len(files) >= 2:
+            # Set first file as File 1 (Pole Book)
+            self.set_file(1, files[0])
+            # Set second file as File 2 (Steel Book)
+            self.set_file(2, files[1])
+            
+            # If more than 2 files selected, show warning
+            if len(files) > 2:
+                QMessageBox.information(
+                    self, 
+                    "Multiple Files Selected", 
+                    f"Selected {len(files)} files. Using first two files:\n\n"
+                    f"File 1: {os.path.basename(files[0])}\n"
+                    f"File 2: {os.path.basename(files[1])}"
+                )
+        elif len(files) == 1:
+            QMessageBox.warning(
+                self, 
+                "Insufficient Files", 
+                "Please select at least 2 Excel files for matching."
+            )
+    
+    def clear_files(self):
+        """Clear both file selections"""
+        self.file1_path = ""
+        self.file2_path = ""
+        self.update_file_display()
+        self.validation_label.setText("Please select both files")
+        self.validation_label.setProperty("class", "status-warning")
             
     def set_file(self, file_num: int, file_path: str):
         """Set the selected file path"""
         if file_num == 1:
             self.file1_path = file_path
-            self.file1_display.setText(os.path.basename(file_path))
-            self.file1_display.setStyleSheet("""
-                QLabel {
-                    border: 2px solid #4CAF50;
-                    padding: 20px;
-                    background-color: #e8f5e8;
-                    border-radius: 5px;
-                }
-            """)
         else:
             self.file2_path = file_path
-            self.file2_display.setText(os.path.basename(file_path))
-            self.file2_display.setStyleSheet("""
-                QLabel {
-                    border: 2px solid #4CAF50;
-                    padding: 20px;
-                    background-color: #e8f5e8;
-                    border-radius: 5px;
-                }
-            """)
         
+        self.update_file_display()
         self.validate_files()
+    
+    def update_file_display(self):
+        """Update the file display list"""
+        # Clear existing file items
+        layout = self.files_container.layout()
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Add current files with actual filenames
+        if self.file1_path:
+            file1_name = os.path.basename(self.file1_path)
+            file1_item = QLabel(file1_name)
+            file1_item.setProperty("class", "file-item")
+            layout.addWidget(file1_item)
+        
+        if self.file2_path:
+            file2_name = os.path.basename(self.file2_path)
+            file2_item = QLabel(file2_name)
+            file2_item.setProperty("class", "file-item")
+            layout.addWidget(file2_item)
+        
+        # Enable/disable Run Match button
+        self.run_match_button.setEnabled(bool(self.file1_path and self.file2_path))
+    
+    def on_drop_zone_clicked(self, event):
+        """Handle click on drop zone"""
+        self.select_both_files()
+    
+    def run_matching(self):
+        """Trigger matching process"""
+        if self.file1_path and self.file2_path:
+            self.files_selected.emit(self.file1_path, self.file2_path)
+            # Emit a signal to start matching
+            if hasattr(self.parent(), 'start_matching'):
+                self.parent().start_matching()
         
     def validate_files(self):
         """Validate that both files are selected and are valid Excel files"""
@@ -380,14 +433,14 @@ class FileSelectionWidget(QWidget):
                 (self.file2_path.endswith('.xlsx') or self.file2_path.endswith('.xls'))):
                 
                 self.validation_label.setText("✓ Files validated successfully")
-                self.validation_label.setStyleSheet("color: green; font-weight: bold;")
+                self.validation_label.setProperty("class", "status-success")
                 self.files_selected.emit(self.file1_path, self.file2_path)
             else:
                 self.validation_label.setText("✗ Invalid files selected")
-                self.validation_label.setStyleSheet("color: red; font-weight: bold;")
+                self.validation_label.setProperty("class", "status-error")
         else:
             self.validation_label.setText("Please select both files")
-            self.validation_label.setStyleSheet("color: orange; font-weight: bold;")
+            self.validation_label.setProperty("class", "status-warning")
     
     def dragEnterEvent(self, event: QDragEnterEvent):
         """Handle drag enter event"""
@@ -397,9 +450,38 @@ class FileSelectionWidget(QWidget):
     def dropEvent(self, event: QDropEvent):
         """Handle drop event"""
         files = [url.toLocalFile() for url in event.mimeData().urls()]
-        if len(files) >= 2:
-            self.set_file(1, files[0])
-            self.set_file(2, files[1])
+        
+        # Filter for Excel files only
+        excel_files = [f for f in files if f.endswith(('.xlsx', '.xls'))]
+        
+        if len(excel_files) >= 2:
+            self.set_file(1, excel_files[0])
+            self.set_file(2, excel_files[1])
+            
+            # Show info if more than 2 Excel files were dropped
+            if len(excel_files) > 2:
+                QMessageBox.information(
+                    self,
+                    "Multiple Files Dropped",
+                    f"Dropped {len(excel_files)} Excel files. Using first two:\n\n"
+                    f"File 1: {os.path.basename(excel_files[0])}\n"
+                    f"File 2: {os.path.basename(excel_files[1])}"
+                )
+        elif len(excel_files) == 1:
+            QMessageBox.warning(
+                self,
+                "Insufficient Files",
+                f"Only 1 Excel file dropped. Please drop at least 2 Excel files.\n\n"
+                f"Dropped: {os.path.basename(excel_files[0])}"
+            )
+        elif len(files) > 0:
+            QMessageBox.warning(
+                self,
+                "Invalid Files",
+                f"No Excel files found in dropped files.\n\n"
+                f"Please drop .xlsx or .xls files only."
+            )
+        
         event.acceptProposedAction()
 
 
@@ -412,47 +494,38 @@ class ProcessingWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(10)
+        
+        # Create section container with curved box
+        section_container = QWidget()
+        section_container.setProperty("class", "section-container")
+        section_layout = QVBoxLayout()
+        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Processing Status")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        
-        # Overall progress
-        self.overall_progress = QProgressBar()
-        self.overall_progress.setRange(0, 100)
-        self.overall_progress.setValue(0)
-        layout.addWidget(QLabel("Overall Progress:"))
-        layout.addWidget(self.overall_progress)
-        
-        # Current status
-        self.status_label = QLabel("Ready to start matching...")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
+        title = QLabel("Match Steps")
+        title.setProperty("class", "heading")
+        title.setStyleSheet("margin-bottom: 10px;")
+        section_layout.addWidget(title)
         
         # Step progress
-        self.steps_group = QGroupBox("Matching Steps")
-        steps_layout = QVBoxLayout()
-        
         self.step_labels = {}
         self.step_progresses = {}
         
         steps = [
-            "Narration Matching",
-            "LC Matching", 
-            "PO Matching",
-            "Interunit Matching",
-            "USD Matching",
-            "Aggregated PO Matching"
+            "Narration Match",
+            "LC Match"
         ]
         
         for step in steps:
             step_layout = QHBoxLayout()
+            step_layout.setSpacing(10)
             
             # Step name
-            step_label = QLabel(f"{step}:")
-            step_label.setMinimumWidth(150)
+            step_label = QLabel(f"{step}")
+            step_label.setMinimumWidth(120)
+            step_label.setFont(QFont("Arial", 10))
             step_layout.addWidget(step_label)
             
             # Step progress bar
@@ -460,102 +533,67 @@ class ProcessingWidget(QWidget):
             step_progress.setRange(0, 100)
             step_progress.setValue(0)
             step_progress.setMaximumHeight(20)
+            step_progress.setProperty("class", "step-progress")
             step_layout.addWidget(step_progress)
             
             # Step status
-            step_status = QLabel("Pending")
-            step_status.setMinimumWidth(80)
+            step_status = QLabel("0%")
+            step_status.setMinimumWidth(40)
+            step_status.setFont(QFont("Arial", 10))
             step_layout.addWidget(step_status)
             
-            steps_layout.addLayout(step_layout)
+            section_layout.addLayout(step_layout)
             
             self.step_labels[step] = step_label
             self.step_progresses[step] = (step_progress, step_status)
         
-        self.steps_group.setLayout(steps_layout)
-        layout.addWidget(self.steps_group)
+        # Add stretch to push everything to top
+        section_layout.addStretch()
         
-        # Control buttons
-        button_layout = QHBoxLayout()
-        
-        self.start_button = QPushButton("Start Matching")
-        self.start_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setEnabled(False)
-        self.cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #da190b;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        
-        button_layout.addWidget(self.start_button)
-        button_layout.addWidget(self.cancel_button)
-        layout.addLayout(button_layout)
+        # Add section container to main layout
+        layout.addWidget(section_container)
         
         self.setLayout(layout)
     
     def update_progress(self, step: int, status: str, matches_found: int):
         """Update progress display"""
-        self.overall_progress.setValue(step)
-        self.status_label.setText(f"{status} ({matches_found} matches found)")
+        # This method is called from ProcessingWidget but we need to update overall progress
+        pass
         
     def complete_step(self, step_name: str, matches_found: int):
         """Mark a step as completed"""
-        if step_name in self.step_progresses:
-            progress_bar, status_label = self.step_progresses[step_name]
+        # Map full step names to short names
+        step_mapping = {
+            "Narration Matching": "Narration Match",
+            "LC Matching": "LC Match"
+        }
+        
+        short_name = step_mapping.get(step_name, step_name)
+        
+        if short_name in self.step_progresses:
+            progress_bar, status_label = self.step_progresses[short_name]
             progress_bar.setValue(100)
-            status_label.setText(f"✓ {matches_found}")
-            status_label.setStyleSheet("color: green; font-weight: bold;")
+            status_label.setText("100%")
+            status_label.setProperty("class", "status-success")
             
             # Also update the step label to show completion
-            if step_name in self.step_labels:
-                self.step_labels[step_name].setStyleSheet("color: green; font-weight: bold;")
+            if short_name in self.step_labels:
+                self.step_labels[short_name].setProperty("class", "step-completed")
     
     def reset_progress(self):
         """Reset all progress indicators"""
-        self.overall_progress.setValue(0)
-        self.status_label.setText("Ready to start matching...")
-        
         for step_name, (progress_bar, status_label) in self.step_progresses.items():
             progress_bar.setValue(0)
-            status_label.setText("Pending")
-            status_label.setStyleSheet("")
+            status_label.setText("0%")
+            status_label.setProperty("class", "step-pending")
             
             # Reset step label styling
             if step_name in self.step_labels:
-                self.step_labels[step_name].setStyleSheet("")
+                self.step_labels[step_name].setProperty("class", "step-pending")
     
     def set_processing_state(self, is_processing: bool):
         """Enable/disable processing controls"""
-        self.start_button.setEnabled(not is_processing)
-        self.cancel_button.setEnabled(is_processing)
+        pass
 
 
 class ResultsWidget(QWidget):
@@ -567,115 +605,56 @@ class ResultsWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(10)
+        
+        # Create section container with curved box
+        section_container = QWidget()
+        section_container.setProperty("class", "section-container")
+        section_layout = QVBoxLayout()
+        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Matching Results")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        title = QLabel("Match Summary")
+        title.setProperty("class", "heading")
+        title.setStyleSheet("margin-bottom: 10px;")
+        section_layout.addWidget(title)
         
-        # Results summary
-        self.summary_group = QGroupBox("Match Summary")
-        summary_layout = QGridLayout()
+        # Results summary - matching the image layout
+        summary_layout = QHBoxLayout()
+        summary_layout.setSpacing(15)
         
-        # Create summary labels
-        self.total_matches_label = QLabel("Total Matches: 0")
-        self.narration_matches_label = QLabel("Narration: 0")
-        self.lc_matches_label = QLabel("LC: 0")
-        self.po_matches_label = QLabel("PO: 0")
-        self.interunit_matches_label = QLabel("Interunit: 0")
-        self.usd_matches_label = QLabel("USD: 0")
-        self.aggregated_po_matches_label = QLabel("Aggregated PO: 0")
+        # LC Matches box
+        self.lc_matches_label = QLabel("LC Matches: 10")
+        self.lc_matches_label.setProperty("class", "match-box")
+        self.lc_matches_label.setMinimumSize(100, 40)
+        summary_layout.addWidget(self.lc_matches_label)
         
-        # Style the labels
-        for label in [self.total_matches_label, self.narration_matches_label, 
-                     self.lc_matches_label, self.po_matches_label,
-                     self.interunit_matches_label, self.usd_matches_label,
-                     self.aggregated_po_matches_label]:
-            label.setFont(QFont("Arial", 10))
-            label.setStyleSheet("padding: 5px;")
+        # PO Matches box
+        self.po_matches_label = QLabel("PO Matches: 10")
+        self.po_matches_label.setProperty("class", "match-box")
+        self.po_matches_label.setMinimumSize(100, 40)
+        summary_layout.addWidget(self.po_matches_label)
         
-        # Add to grid
-        summary_layout.addWidget(self.total_matches_label, 0, 0)
-        summary_layout.addWidget(self.narration_matches_label, 1, 0)
-        summary_layout.addWidget(self.lc_matches_label, 1, 1)
-        summary_layout.addWidget(self.po_matches_label, 2, 0)
-        summary_layout.addWidget(self.interunit_matches_label, 2, 1)
-        summary_layout.addWidget(self.usd_matches_label, 3, 0)
-        summary_layout.addWidget(self.aggregated_po_matches_label, 3, 1)
+        section_layout.addLayout(summary_layout)
         
-        self.summary_group.setLayout(summary_layout)
-        layout.addWidget(self.summary_group)
+        # Add stretch to push everything to top
+        section_layout.addStretch()
         
-        # Action buttons
-        button_layout = QHBoxLayout()
-        
-        self.export_button = QPushButton("Export Excel Files")
-        self.export_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        
-        self.open_folder_button = QPushButton("Open Output Folder")
-        self.open_folder_button.setStyleSheet("""
-            QPushButton {
-                background-color: #FF9800;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #F57C00;
-            }
-        """)
-        
-        button_layout.addWidget(self.export_button)
-        button_layout.addWidget(self.open_folder_button)
-        layout.addLayout(button_layout)
-        
-        # Initially disable export button
-        self.export_button.setEnabled(False)
+        # Add section container to main layout
+        layout.addWidget(section_container)
         
         self.setLayout(layout)
     
     def update_results(self, statistics: Dict[str, Any]):
         """Update results display with statistics"""
-        self.total_matches_label.setText(f"Total Matches: {statistics['total_matches']}")
-        self.narration_matches_label.setText(f"Narration: {statistics['narration_matches']}")
-        self.lc_matches_label.setText(f"LC: {statistics['lc_matches']}")
-        self.po_matches_label.setText(f"PO: {statistics['po_matches']}")
-        self.interunit_matches_label.setText(f"Interunit: {statistics['interunit_matches']}")
-        self.usd_matches_label.setText(f"USD: {statistics['usd_matches']}")
-        self.aggregated_po_matches_label.setText(f"Aggregated PO: {statistics['aggregated_po_matches']}")
-        
-        # Enable export button if matches were found
-        self.export_button.setEnabled(statistics['total_matches'] > 0)
+        self.lc_matches_label.setText(f"LC Matches: {statistics.get('lc_matches', 0)}")
+        self.po_matches_label.setText(f"PO Matches: {statistics.get('po_matches', 0)}")
     
     def reset_results(self):
         """Reset results display"""
-        self.update_results({
-            'total_matches': 0,
-            'narration_matches': 0,
-            'lc_matches': 0,
-            'po_matches': 0,
-            'interunit_matches': 0,
-            'usd_matches': 0,
-            'aggregated_po_matches': 0
-        })
+        self.lc_matches_label.setText("LC Matches: 0")
+        self.po_matches_label.setText("PO Matches: 0")
 
 
 class LogWidget(QWidget):
@@ -687,31 +666,30 @@ class LogWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(5)
+        
+        # Create section container with curved box
+        section_container = QWidget()
+        section_container.setProperty("class", "section-container")
+        section_layout = QVBoxLayout()
+        section_layout.setContentsMargins(20, 20, 20, 20)  # Add padding inside container
+        section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Processing Log")
-        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        title = QLabel("Process Log:")
+        title.setProperty("class", "heading")
+        title.setStyleSheet("margin-bottom: 5px;")
+        section_layout.addWidget(title)
         
         # Log text area
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(200)
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                font-family: 'Courier New', monospace;
-                font-size: 9pt;
-            }
-        """)
-        layout.addWidget(self.log_text)
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setProperty("class", "log-text")
+        section_layout.addWidget(self.log_text)
         
-        # Clear button
-        clear_button = QPushButton("Clear Log")
-        clear_button.clicked.connect(self.clear_log)
-        layout.addWidget(clear_button)
+        # Add section container to main layout
+        layout.addWidget(section_container)
         
         self.setLayout(layout)
     
@@ -751,34 +729,49 @@ class MainWindow(QMainWindow):
         
         # Create main layout
         main_layout = QVBoxLayout()
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(20, 20, 20, 20)
         
-        # Create file selection widget
+        # Top row: File selection and Match steps side by side
+        top_row = QHBoxLayout()
+        top_row.setSpacing(20)
+        
+        # File selection widget (left) - equal width
         self.file_selection = FileSelectionWidget()
         self.file_selection.files_selected.connect(self.on_files_selected)
-        main_layout.addWidget(self.file_selection)
+        self.file_selection.run_match_button.clicked.connect(self.start_matching)
+        top_row.addWidget(self.file_selection, 1)  # Equal stretch factor
         
-        # Create splitter for processing and results
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Processing widget
+        # Processing widget (right) - equal width
         self.processing_widget = ProcessingWidget()
-        self.processing_widget.start_button.clicked.connect(self.start_matching)
-        self.processing_widget.cancel_button.clicked.connect(self.cancel_matching)
-        splitter.addWidget(self.processing_widget)
+        top_row.addWidget(self.processing_widget, 1)  # Equal stretch factor
         
-        # Results widget
+        main_layout.addLayout(top_row)
+        
+        # Overall progress bar
+        overall_label = QLabel("Overall Progress:")
+        overall_label.setProperty("class", "heading")
+        main_layout.addWidget(overall_label)
+        
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setRange(0, 100)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setProperty("class", "overall-progress")
+        main_layout.addWidget(self.overall_progress)
+        
+        # Bottom row: Match Summary and Process Log side by side
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(20)
+        
+        # Results widget (left) - equal width
         self.results_widget = ResultsWidget()
-        self.results_widget.export_button.clicked.connect(self.export_files)
-        self.results_widget.open_folder_button.clicked.connect(self.open_output_folder)
-        splitter.addWidget(self.results_widget)
+        bottom_row.addWidget(self.results_widget, 1)  # Equal stretch factor
         
-        # Set splitter proportions
-        splitter.setSizes([400, 300])
-        main_layout.addWidget(splitter)
-        
-        # Create log widget
+        # Log widget (right) - equal width
         self.log_widget = LogWidget()
-        main_layout.addWidget(self.log_widget)
+        bottom_row.addWidget(self.log_widget, 1)  # Equal stretch factor
+        
+        main_layout.addLayout(bottom_row)
         
         central_widget.setLayout(main_layout)
         
@@ -823,45 +816,213 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
     
     def apply_styling(self):
-        """Apply modern styling to the application"""
+        """Apply styling to match the reference image exactly"""
         self.setStyleSheet("""
+            /* Main Window */
             QMainWindow {
-                background-color: #f0f0f0;
+                background-color: #faf9f8;
+                font-family: 'Segoe UI', Arial, sans-serif;
             }
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
+            
+            /* Universal Heading - Segoe UI Semibold */
+            QLabel[class="heading"] {
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-weight: 600;
+                color: #2c3e50;
+                font-size: 20px;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+            
+            /* Section Containers with Windows Dialog Style */
+            QWidget[class="section-container"] {
+                background-color: white;
+                border: 1px solid #e1e5e9;
+                border-radius: 8px;
+                margin: 8px;
             }
-            QPushButton {
-                background-color: #e0e0e0;
-                border: 1px solid #b0b0b0;
-                border-radius: 3px;
-                padding: 5px 10px;
-                font-weight: bold;
+            
+            /* Primary Button - Windows Dialog Style */
+            QPushButton[class="browse-button"] {
+                background-color: #0078D4;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: 600;
+                font-size: 12px;
+                min-height: 32px;
+                min-width: 80px;
             }
-            QPushButton:hover {
-                background-color: #d0d0d0;
+            QPushButton[class="browse-button"]:hover {
+                background-color: #106EBE;
             }
-            QPushButton:pressed {
-                background-color: #c0c0c0;
+            
+            /* Secondary Button - Windows Dialog Style */
+            QPushButton[class="clear-button"] {
+                background-color: white;
+                color: #323130;
+                border: 1px solid #8A8886;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: 400;
+                font-size: 12px;
+                min-height: 32px;
+                min-width: 80px;
             }
-            QProgressBar {
-                border: 2px solid #b0b0b0;
-                border-radius: 5px;
+            QPushButton[class="clear-button"]:hover {
+                background-color: #F3F2F1;
+                border-color: #605E5C;
+            }
+            
+            /* Primary Action Button - Windows Dialog Style */
+            QPushButton[class="run-button"] {
+                background-color: #0078D4;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 10px 20px;
+                font-weight: 600;
+                font-size: 12px;
+                min-height: 36px;
+                min-width: 90px;
+            }
+            QPushButton[class="run-button"]:hover {
+                background-color: #106EBE;
+            }
+            QPushButton[class="run-button"]:disabled {
+                background-color: #A19F9D;
+                color: #C8C6C4;
+            }
+            
+            /* Files List */
+            QWidget[class="files-list"] {
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 8px;
+                margin: 5px 0;
+            }
+            
+            /* File Item */
+            QLabel[class="file-item"] {
+                padding: 4px 8px;
+                margin: 1px 0;
+                background-color: transparent;
+                color: #495057;
+                font-style: italic;
+                font-size: 11px;
+            }
+            
+            /* Step Progress Bars - Orange */
+            QProgressBar[class="step-progress"] {
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
                 text-align: center;
-                background-color: #f0f0f0;
+                background-color: #f8f9fa;
+                height: 20px;
+                font-weight: 500;
+                color: #495057;
+                font-size: 10px;
             }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
+            QProgressBar[class="step-progress"]::chunk {
+                background-color: #fd7e14;
                 border-radius: 3px;
+            }
+            
+            /* Overall Progress Bar - Orange */
+            QProgressBar[class="overall-progress"] {
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #f8f9fa;
+                height: 25px;
+                font-weight: 600;
+                color: #495057;
+                font-size: 12px;
+            }
+            QProgressBar[class="overall-progress"]::chunk {
+                background-color: #fd7e14;
+                border-radius: 3px;
+            }
+            
+            /* Match Boxes */
+            QLabel[class="match-box"] {
+                border: 1px solid #007bff;
+                border-radius: 4px;
+                background-color: #f8f9fa;
+                padding: 8px 12px;
+                color: #495057;
+                font-weight: 500;
+                font-size: 11px;
+                text-align: center;
+            }
+            
+            /* Log Text */
+            QTextEdit[class="log-text"] {
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                background-color: white;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 10px;
+                padding: 8px;
+            }
+            
+            /* Status Labels */
+            QLabel[class="status-success"] {
+                color: #28a745;
+                font-weight: 600;
+            }
+            QLabel[class="status-error"] {
+                color: #dc3545;
+                font-weight: 600;
+            }
+            QLabel[class="status-warning"] {
+                color: #ffc107;
+                font-weight: 600;
+            }
+            
+            /* Step Labels */
+            QLabel[class="step-completed"] {
+                color: #28a745;
+                font-weight: 600;
+            }
+            QLabel[class="step-pending"] {
+                color: #6c757d;
+            }
+            
+            /* Menu Bar */
+            QMenuBar {
+                background-color: #343a40;
+                color: white;
+                border: none;
+                padding: 4px;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 8px 12px;
+                border-radius: 4px;
+            }
+            QMenuBar::item:selected {
+                background-color: #495057;
+            }
+            QMenu {
+                background-color: white;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #e9ecef;
+            }
+            
+            /* Status Bar */
+            QStatusBar {
+                background-color: #f8f9fa;
+                border-top: 1px solid #dee2e6;
+                color: #495057;
             }
         """)
     
@@ -887,16 +1048,22 @@ class MainWindow(QMainWindow):
         self.processing_widget.set_processing_state(True)
         self.processing_widget.reset_progress()
         self.results_widget.reset_results()
+        self.overall_progress.setValue(0)
         
         # Create and start matching thread
         self.matching_thread = MatchingThread(self.current_file1, self.current_file2)
-        self.matching_thread.progress_updated.connect(self.processing_widget.update_progress)
+        self.matching_thread.progress_updated.connect(self.update_overall_progress)
         self.matching_thread.step_completed.connect(self.processing_widget.complete_step)
         self.matching_thread.matching_finished.connect(self.on_matching_finished)
         self.matching_thread.error_occurred.connect(self.on_matching_error)
         self.matching_thread.start()
         
         self.status_bar.showMessage("Processing...")
+    
+    def update_overall_progress(self, step: int, status: str, matches_found: int):
+        """Update overall progress bar"""
+        self.overall_progress.setValue(step)
+        self.log_widget.add_log(f"{status} ({matches_found} matches found)")
     
     def cancel_matching(self):
         """Cancel the matching process"""
@@ -930,9 +1097,18 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # Create matcher instance and generate output files
+            self.log_widget.add_log("Starting export process...")
+            
+            # Create matcher instance and load only the transaction data (without matching)
             matcher = ExcelTransactionMatcher(self.current_file1, self.current_file2)
-            matcher.transactions1, matcher.transactions2, _, _, _, _, _, _, _, _, _, _ = matcher.process_files()
+            
+            # Load transaction data without running matching logic
+            self.log_widget.add_log("Loading transaction data...")
+            matcher.metadata1, matcher.transactions1 = matcher.read_complex_excel(self.current_file1)
+            matcher.metadata2, matcher.transactions2 = matcher.read_complex_excel(self.current_file2)
+            
+            # Create matched files using existing matches
+            self.log_widget.add_log("Creating matched Excel files...")
             matcher.create_matched_files(self.current_matches, matcher.transactions1, matcher.transactions2)
             
             self.log_widget.add_log("Excel files exported successfully!")
