@@ -96,7 +96,10 @@ class InterunitLoanMatcher:
         if existing_matches is None:
             existing_matches = {}
         if match_id_manager is None:
-            from match_id_manager import get_match_id_manager
+            try:
+                from ..match_id_manager import get_match_id_manager
+            except ImportError:
+                from match_id_manager import get_match_id_manager
             match_id_manager = get_match_id_manager()
         
         print(f"\n=== INTERUNIT LOAN MATCHING LOGIC (CORRECTED) ===")
@@ -350,7 +353,7 @@ class InterunitLoanMatcher:
                         'full_account_format': None
                     }
             except Exception as e:
-                print(f"DEBUG: Interunit narration regex error with pattern '{pattern}' and text '{narration}': {e}")
+                pass  # Regex error - skip this pattern
                 continue
         
         return None

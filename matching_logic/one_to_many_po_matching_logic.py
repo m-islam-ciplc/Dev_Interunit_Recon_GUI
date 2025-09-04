@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from po_matching_logic import PO_PATTERN
+from .po_matching_logic import PO_PATTERN
 
 class AggregatedPOMatchingLogic:
     """Handles the logic for finding aggregated PO matches between two files."""
@@ -27,7 +27,10 @@ class AggregatedPOMatchingLogic:
         if existing_matches is None:
             existing_matches = {}
         if match_id_manager is None:
-            from match_id_manager import get_match_id_manager
+            try:
+                from ..match_id_manager import get_match_id_manager
+            except ImportError:
+                from match_id_manager import get_match_id_manager
             match_id_manager = get_match_id_manager()
         
         print(f"\n=== AGGREGATED PO MATCHING LOGIC ===")

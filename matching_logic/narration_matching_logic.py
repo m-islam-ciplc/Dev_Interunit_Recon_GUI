@@ -25,7 +25,10 @@ class NarrationMatchingLogic:
         if existing_matches is None:
             existing_matches = {}
         if match_id_manager is None:
-            from match_id_manager import get_match_id_manager
+            try:
+                from ..match_id_manager import get_match_id_manager
+            except ImportError:
+                from match_id_manager import get_match_id_manager
             match_id_manager = get_match_id_manager()
         
         print(f"\n=== NARRATION MATCHING LOGIC (STEP 1 - HIGHEST PRIORITY) ===")

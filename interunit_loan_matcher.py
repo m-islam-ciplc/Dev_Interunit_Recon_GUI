@@ -6,12 +6,10 @@ import sys
 import argparse
 from openpyxl.styles import Alignment
 import openpyxl
-from lc_matching_logic import LCMatchingLogic
-from po_matching_logic import POMatchingLogic
-from usd_matching_logic import USDMatchingLogic
-from interunit_loan_matching_logic import InterunitLoanMatcher
-from aggregated_po_matching_logic import AggregatedPOMatchingLogic
-from narration_matching_logic import NarrationMatchingLogic
+from matching_logic import (
+    LCMatchingLogic, POMatchingLogic, USDMatchingLogic,
+    InterunitLoanMatcher, AggregatedPOMatchingLogic, NarrationMatchingLogic
+)
 from transaction_block_identifier import TransactionBlockIdentifier
 
 # =============================================================================
@@ -24,10 +22,8 @@ from config import (
     VERBOSE_DEBUG
 )
 
-# Import patterns from their respective modules
-from lc_matching_logic import LC_PATTERN
-from po_matching_logic import PO_PATTERN
-from usd_matching_logic import USD_PATTERN
+# Import patterns from the matching logic package
+from matching_logic import LC_PATTERN, PO_PATTERN, USD_PATTERN
 
 def print_configuration():
     """Print current configuration settings."""
@@ -100,12 +96,11 @@ class   ExcelTransactionMatcher:
         transactions.columns = transactions.iloc[0]
         transactions = transactions.iloc[1:].reset_index(drop=True)
 
-        # DEBUG: Show what columns we actually have
-                # print(f"DEBUG: Columns after transformation: {list(transactions.columns)}")
 
-        # DEBUG: Show actual date values from first few rows
-        # print(f"DEBUG: First 5 date values (raw): {transactions.iloc[:5, 0].tolist()}")
-        # print(f"DEBUG: Date column data type: {transactions.iloc[0, 0].__class__.__name__}")
+
+
+
+
 
         return metadata, transactions
     
@@ -160,11 +155,11 @@ class   ExcelTransactionMatcher:
                     # Found LC in narration row, need to find parent transaction row
                     parent_row = self.find_parent_transaction_row_with_formatting(ws, row)
                     if parent_row is not None:
-                        # print(f"DEBUG: LC {lc} at narration row {row} linked to parent row {parent_row}")
+
                         lc_numbers.append(lc)
                         lc_parent_rows.append(parent_row)
                     else:
-                        # print(f"DEBUG: LC {lc} at narration row {row} - NO PARENT FOUND!")
+
                         lc_numbers.append(None)
                         lc_parent_rows.append(None)
                 else:
@@ -229,7 +224,7 @@ class   ExcelTransactionMatcher:
                             # print(f"DEBUG: PO {po} at Excel row {excel_row} - INVALID DataFrame index {df_index}")
                             pass
                     else:
-                        # print(f"DEBUG: PO {po} at Excel row {excel_row} - NO PARENT FOUND!")
+
                         pass
         
         wb.close()
@@ -401,7 +396,7 @@ class   ExcelTransactionMatcher:
         print(f"File 1: {len(self.transactions1)} rows")
         print(f"File 2: {len(self.transactions2)} rows")
         
-        # DEBUG: Show column names for both files
+
         print(f"File 1 columns: {list(self.transactions1.columns)}")
         print(f"File 2 columns: {list(self.transactions2.columns)}")
         
@@ -1067,8 +1062,7 @@ class   ExcelTransactionMatcher:
         # Concatenate new columns with existing data
         file1_matched = pd.concat([match_id_col, audit_info_col, file1_matched, match_type_col], axis=1)
         
-        # print(f"DEBUG: File1 DataFrame created with shape: {file1_matched.shape}")
-        # print(f"DEBUG: File1 columns: {list(file1_matched.columns)}")
+
         
         # Create file2 with new columns
         file2_matched = transactions2.copy()

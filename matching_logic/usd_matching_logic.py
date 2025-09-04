@@ -39,7 +39,10 @@ class USDMatchingLogic:
         if existing_matches is None:
             existing_matches = {}
         if match_id_manager is None:
-            from match_id_manager import get_match_id_manager
+            try:
+                from ..match_id_manager import get_match_id_manager
+            except ImportError:
+                from match_id_manager import get_match_id_manager
             match_id_manager = get_match_id_manager()
         
         print(f"\n=== USD MATCHING LOGIC ===")
@@ -123,9 +126,7 @@ class USDMatchingLogic:
                 narration2 = str(header_row2.iloc[2]).upper()
                 
                 # DEBUG: Show what we're trying to match
-                # print(f"      DEBUG: File 1 narration: {narration1[:100]}...")
-                # print(f"      DEBUG: File 2 narration: {narration2[:100]}...")
-                # print(f"      DEBUG: Using USD_PATTERN: {USD_PATTERN}")
+
                 
                 usd_amounts_in_narration1 = re.findall(USD_PATTERN, narration1)
                 usd_amounts_in_narration2 = re.findall(USD_PATTERN, narration2)
