@@ -561,7 +561,10 @@ class   ExcelTransactionMatcher:
         
         # Update the shared counter after LC matching
         if lc_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in lc_matches)
+            # Get the highest match counter from all LC matches
+            max_lc_counter = max(int(match['match_id'][1:]) for match in lc_matches)
+            # Update shared counter to ensure next matches start after this
+            shared_match_counter = max(shared_match_counter, max_lc_counter)
         
         print(f"\nLC Matching Results: {len(lc_matches)} matches found")
         
@@ -602,7 +605,10 @@ class   ExcelTransactionMatcher:
         
         # Update the shared counter after PO matching
         if po_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in po_matches)
+            # Get the highest match counter from all PO matches
+            max_po_counter = max(int(match['match_id'][1:]) for match in po_matches)
+            # Update shared counter to ensure next matches start after this
+            shared_match_counter = max(shared_match_counter, max_po_counter)
         
         print(f"\nPO Matching Results: {len(po_matches)} matches found")
         
@@ -640,6 +646,13 @@ class   ExcelTransactionMatcher:
             transactions1, transactions2, interunit_accounts1_unmatched, interunit_accounts2_unmatched,
             self.file1_path, self.file2_path, shared_existing_matches, shared_match_counter
         )
+        
+        # Update the shared counter after Interunit matching
+        if interunit_matches:
+            # Get the highest match counter from all Interunit matches
+            max_interunit_counter = max(int(match['match_id'][1:]) for match in interunit_matches)
+            # Update shared counter to ensure next matches start after this
+            shared_match_counter = max(shared_match_counter, max_interunit_counter)
         
         print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
         
@@ -680,7 +693,10 @@ class   ExcelTransactionMatcher:
         
         # Update the shared counter after USD matching
         if usd_matches:
-            shared_match_counter = max(int(match['match_id'][1:]) for match in usd_matches)
+            # Get the highest match counter from all USD matches
+            max_usd_counter = max(int(match['match_id'][1:]) for match in usd_matches)
+            # Update shared counter to ensure next matches start after this
+            shared_match_counter = max(shared_match_counter, max_usd_counter)
         
         print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
         
