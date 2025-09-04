@@ -629,23 +629,66 @@ class ResultsWidget(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
-        # Results summary - matching the image layout
-        summary_layout = QHBoxLayout()
-        summary_layout.setSpacing(15)
+        # Results summary - show all match types
+        # First row
+        first_row_layout = QHBoxLayout()
+        first_row_layout.setSpacing(15)
+        
+        # Narration Matches box
+        self.narration_matches_label = QLabel("Narration: 0")
+        self.narration_matches_label.setProperty("class", "match-summary-item")
+        self.narration_matches_label.setMinimumSize(100, 30)
+        first_row_layout.addWidget(self.narration_matches_label)
         
         # LC Matches box
-        self.lc_matches_label = QLabel("LC Matches: 10")
-        self.lc_matches_label.setProperty("class", "match-box")
-        self.lc_matches_label.setMinimumSize(100, 40)
-        summary_layout.addWidget(self.lc_matches_label)
+        self.lc_matches_label = QLabel("LC: 0")
+        self.lc_matches_label.setProperty("class", "match-summary-item")
+        self.lc_matches_label.setMinimumSize(100, 30)
+        first_row_layout.addWidget(self.lc_matches_label)
         
         # PO Matches box
-        self.po_matches_label = QLabel("PO Matches: 10")
-        self.po_matches_label.setProperty("class", "match-box")
-        self.po_matches_label.setMinimumSize(100, 40)
-        summary_layout.addWidget(self.po_matches_label)
+        self.po_matches_label = QLabel("PO: 0")
+        self.po_matches_label.setProperty("class", "match-summary-item")
+        self.po_matches_label.setMinimumSize(100, 30)
+        first_row_layout.addWidget(self.po_matches_label)
         
-        section_layout.addLayout(summary_layout)
+        section_layout.addLayout(first_row_layout)
+        
+        # Second row
+        second_row_layout = QHBoxLayout()
+        second_row_layout.setSpacing(15)
+        
+        # Interunit Matches box
+        self.interunit_matches_label = QLabel("Interunit: 0")
+        self.interunit_matches_label.setProperty("class", "match-summary-item")
+        self.interunit_matches_label.setMinimumSize(100, 30)
+        second_row_layout.addWidget(self.interunit_matches_label)
+        
+        # USD Matches box
+        self.usd_matches_label = QLabel("USD: 0")
+        self.usd_matches_label.setProperty("class", "match-summary-item")
+        self.usd_matches_label.setMinimumSize(100, 30)
+        second_row_layout.addWidget(self.usd_matches_label)
+        
+        # One-to-Many PO Matches box
+        self.aggregated_po_matches_label = QLabel("One-to-Many PO: 0")
+        self.aggregated_po_matches_label.setProperty("class", "match-summary-item")
+        self.aggregated_po_matches_label.setMinimumSize(120, 30)
+        second_row_layout.addWidget(self.aggregated_po_matches_label)
+        
+        section_layout.addLayout(second_row_layout)
+        
+        # Total Matches box (larger, centered)
+        total_layout = QHBoxLayout()
+        total_layout.addStretch()
+        
+        self.total_matches_label = QLabel("Total Matches: 0")
+        self.total_matches_label.setProperty("class", "total-match-summary")
+        self.total_matches_label.setMinimumSize(150, 40)
+        total_layout.addWidget(self.total_matches_label)
+        
+        total_layout.addStretch()
+        section_layout.addLayout(total_layout)
         
         # Add stretch to push content to top (consistent with other sections)
         section_layout.addStretch()
@@ -657,13 +700,31 @@ class ResultsWidget(QWidget):
     
     def update_results(self, statistics: Dict[str, Any]):
         """Update results display with statistics"""
-        self.lc_matches_label.setText(f"LC Matches: {statistics.get('lc_matches', 0)}")
-        self.po_matches_label.setText(f"PO Matches: {statistics.get('po_matches', 0)}")
+        self.narration_matches_label.setText(f"Narration: {statistics.get('narration_matches', 0)}")
+        self.lc_matches_label.setText(f"LC: {statistics.get('lc_matches', 0)}")
+        self.po_matches_label.setText(f"PO: {statistics.get('po_matches', 0)}")
+        self.interunit_matches_label.setText(f"Interunit: {statistics.get('interunit_matches', 0)}")
+        self.usd_matches_label.setText(f"USD: {statistics.get('usd_matches', 0)}")
+        self.aggregated_po_matches_label.setText(f"One-to-Many PO: {statistics.get('aggregated_po_matches', 0)}")
+        
+        # Calculate total matches
+        total = (statistics.get('narration_matches', 0) + 
+                statistics.get('lc_matches', 0) + 
+                statistics.get('po_matches', 0) + 
+                statistics.get('interunit_matches', 0) + 
+                statistics.get('usd_matches', 0) + 
+                statistics.get('aggregated_po_matches', 0))
+        self.total_matches_label.setText(f"Total Matches: {total}")
     
     def reset_results(self):
         """Reset results display"""
-        self.lc_matches_label.setText("LC Matches: 0")
-        self.po_matches_label.setText("PO Matches: 0")
+        self.narration_matches_label.setText("Narration: 0")
+        self.lc_matches_label.setText("LC: 0")
+        self.po_matches_label.setText("PO: 0")
+        self.interunit_matches_label.setText("Interunit: 0")
+        self.usd_matches_label.setText("USD: 0")
+        self.aggregated_po_matches_label.setText("One-to-Many PO: 0")
+        self.total_matches_label.setText("Total Matches: 0")
 
 
 class LogWidget(QWidget):
@@ -953,16 +1014,30 @@ class MainWindow(QMainWindow):
                 border-radius: 3px;
             }
             
-            /* Match Boxes */
-            QLabel[class="match-box"] {
-                border: 1px solid #007bff;
+            /* Match Summary Items */
+            QLabel[class="match-summary-item"] {
+                border: 1px solid #dee2e6;
                 border-radius: 4px;
                 background-color: #f8f9fa;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 color: #495057;
                 font-weight: 500;
-                font-size: 11px;
+                font-size: 12px;
                 text-align: center;
+                font-family: "Segoe UI";
+            }
+            
+            /* Total Match Summary */
+            QLabel[class="total-match-summary"] {
+                border: 2px solid #28a745;
+                border-radius: 6px;
+                background-color: #d4edda;
+                padding: 8px 16px;
+                color: #155724;
+                font-weight: 600;
+                font-size: 14px;
+                text-align: center;
+                font-family: "Segoe UI";
             }
             
             /* Log Text */
