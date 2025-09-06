@@ -1089,19 +1089,22 @@ class MainWindow(QMainWindow):
             matcher.create_matched_files(self.current_matches, matcher.transactions1, matcher.transactions2)
             
             self.log_widget.add_log("Excel files exported successfully!")
-            QMessageBox.information(self, "Export Complete", "Matched Excel files have been exported to the Output folder.")
+            QMessageBox.information(self, "Export Complete", "Matched Excel files have been exported to the same folder as the input files.")
             
         except Exception as e:
             self.log_widget.add_log(f"Export error: {str(e)}")
             QMessageBox.critical(self, "Export Error", f"Failed to export files:\n\n{str(e)}")
     
     def open_output_folder(self):
-        """Open the output folder in file explorer"""
-        output_path = Path(OUTPUT_FOLDER)
-        if output_path.exists():
-            os.startfile(str(output_path))
+        """Open the input file folder in file explorer"""
+        if hasattr(self, 'file1_path') and self.file1_path:
+            input_dir = Path(self.file1_path).parent
+            if input_dir.exists():
+                os.startfile(str(input_dir))
+            else:
+                QMessageBox.warning(self, "Folder Not Found", f"Input folder not found: {input_dir}")
         else:
-            QMessageBox.warning(self, "Folder Not Found", f"Output folder not found: {OUTPUT_FOLDER}")
+            QMessageBox.information(self, "No Files Selected", "Please select input files first to see the output location.")
     
     def closeEvent(self, event):
         """Handle application close event"""

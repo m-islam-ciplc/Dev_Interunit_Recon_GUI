@@ -1177,8 +1177,20 @@ class   ExcelTransactionMatcher:
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]
         base_name2 = os.path.splitext(os.path.basename(self.file2_path))[0]
         
-        output_file1 = os.path.join(OUTPUT_FOLDER, f"{base_name1}{OUTPUT_SUFFIX}")
-        output_file2 = os.path.join(OUTPUT_FOLDER, f"{base_name2}{OUTPUT_SUFFIX}")
+        # Get the directory of the input files
+        input_dir1 = os.path.dirname(self.file1_path)
+        input_dir2 = os.path.dirname(self.file2_path)
+        
+        output_file1 = os.path.join(input_dir1, f"{base_name1}{OUTPUT_SUFFIX}")
+        output_file2 = os.path.join(input_dir2, f"{base_name2}{OUTPUT_SUFFIX}")
+        
+        print(f"\n=== OUTPUT FILE LOCATIONS ===")
+        print(f"Input File 1: {self.file1_path}")
+        print(f"Input Directory 1: {input_dir1}")
+        print(f"Output File 1: {output_file1}")
+        print(f"Input File 2: {self.file2_path}")
+        print(f"Input Directory 2: {input_dir2}")
+        print(f"Output File 2: {output_file2}")
         
         if VERBOSE_DEBUG:
             print(f"\n=== DEBUG: BEFORE SAVING ===")
@@ -1258,8 +1270,8 @@ class   ExcelTransactionMatcher:
         
         # Also create a simple version without metadata to test (if enabled)
         if CREATE_SIMPLE_FILES:
-            simple_output1 = os.path.join(OUTPUT_FOLDER, f"{base_name1}{SIMPLE_SUFFIX}")
-            simple_output2 = os.path.join(OUTPUT_FOLDER, f"{base_name2}{SIMPLE_SUFFIX}")
+            simple_output1 = os.path.join(input_dir1, f"{base_name1}{SIMPLE_SUFFIX}")
+            simple_output2 = os.path.join(input_dir2, f"{base_name2}{SIMPLE_SUFFIX}")
             
             print(f"\nCreating simple test files without metadata...")
             file1_matched.to_excel(simple_output1, index=False, header=True)
