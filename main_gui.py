@@ -196,39 +196,12 @@ class MatchingThread(QThread):
             if self.is_cancelled:
                 return
                 
-            # Step 6: Aggregated PO Matching
-            self.progress_updated.emit(90, "Finding aggregated PO matches...", 0)
-            # Create masks for unmatched records (after all previous matching)
-            narration_lc_po_interunit_usd_matched_indices1 = set()
-            narration_lc_po_interunit_usd_matched_indices2 = set()
-            
-            for match in narration_matches + lc_matches + po_matches + interunit_matches + usd_matches:
-                narration_lc_po_interunit_usd_matched_indices1.add(match['File1_Index'])
-                narration_lc_po_interunit_usd_matched_indices2.add(match['File2_Index'])
-            
-            # Filter PO numbers to only unmatched records
-            po_numbers1_unmatched_for_aggregated = po_numbers1.copy()
-            po_numbers2_unmatched_for_aggregated = po_numbers2.copy()
-            
-            for idx in narration_lc_po_interunit_usd_matched_indices1:
-                if idx < len(po_numbers1_unmatched_for_aggregated):
-                    po_numbers1_unmatched_for_aggregated.iloc[idx] = None
-            
-            for idx in narration_lc_po_interunit_usd_matched_indices2:
-                if idx < len(po_numbers2_unmatched_for_aggregated):
-                    po_numbers2_unmatched_for_aggregated.iloc[idx] = None
-            
-            aggregated_po_matches = matcher.aggregated_po_matching_logic.find_potential_matches(
-                transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
-                {}, None
-            )
-            self.step_completed.emit("Aggregated PO Matching", len(aggregated_po_matches))
             
             if self.is_cancelled:
                 return
                 
             # Combine all matches
-            all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches + aggregated_po_matches
+            all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches
             
             # Assign sequential Match IDs
             match_counter = 1
@@ -247,8 +220,7 @@ class MatchingThread(QThread):
                 'lc_matches': len(lc_matches),
                 'po_matches': len(po_matches),
                 'interunit_matches': len(interunit_matches),
-                'usd_matches': len(usd_matches),
-                'aggregated_po_matches': len(aggregated_po_matches)
+                'usd_matches': len(usd_matches)
             }
             
             self.progress_updated.emit(100, "Matching completed successfully!", stats['total_matches'])
@@ -512,8 +484,7 @@ class ProcessingWidget(QWidget):
             "LC Matches",
             "One to One PO Matches",
             "Interunit Matches",
-            "USD Matches",
-            "One-to-Many PO Matches"
+            "USD Matches"
         ]
         
         for step in steps:
@@ -525,6 +496,7 @@ class ProcessingWidget(QWidget):
             step_label.setFixedWidth(180)  # Fixed width for all labels
             step_label.setFont(QFont("Segoe UI", 10))
             step_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            
             step_layout.addWidget(step_label)
             
             # Step progress bar
@@ -575,8 +547,7 @@ class ProcessingWidget(QWidget):
             "LC Matching": "LC Matches",
             "PO Matching": "One to One PO Matches",
             "Interunit Matching": "Interunit Matches",
-            "USD Matching": "USD Matches",
-            "Aggregated PO Matching": "One-to-Many PO Matches"
+            "USD Matching": "USD Matches"
         }
         
         short_name = step_mapping.get(step_name, step_name)
@@ -657,10 +628,6 @@ class ResultsWidget(QWidget):
         self.usd_matches_label.setProperty("class", "match-summary-text")
         single_row_layout.addWidget(self.usd_matches_label)
         
-        # One-to-Many PO Matches - bold text style
-        self.aggregated_po_matches_label = QLabel("One-to-Many PO: 0")
-        self.aggregated_po_matches_label.setProperty("class", "match-summary-text")
-        single_row_layout.addWidget(self.aggregated_po_matches_label)
         
         # Add some spacing before total
         single_row_layout.addStretch(1)
@@ -710,15 +677,13 @@ class ResultsWidget(QWidget):
         self.po_matches_label.setText(f"PO: {statistics.get('po_matches', 0)}")
         self.interunit_matches_label.setText(f"Interunit: {statistics.get('interunit_matches', 0)}")
         self.usd_matches_label.setText(f"USD: {statistics.get('usd_matches', 0)}")
-        self.aggregated_po_matches_label.setText(f"One-to-Many PO: {statistics.get('aggregated_po_matches', 0)}")
         
         # Calculate total matches
         total = (statistics.get('narration_matches', 0) + 
                 statistics.get('lc_matches', 0) + 
                 statistics.get('po_matches', 0) + 
                 statistics.get('interunit_matches', 0) + 
-                statistics.get('usd_matches', 0) + 
-                statistics.get('aggregated_po_matches', 0))
+                statistics.get('usd_matches', 0))
         self.total_matches_label.setText(f"Total Matches: {total}")
         
         # Enable the Open buttons when results are available
@@ -733,7 +698,6 @@ class ResultsWidget(QWidget):
         self.po_matches_label.setText("PO: 0")
         self.interunit_matches_label.setText("Interunit: 0")
         self.usd_matches_label.setText("USD: 0")
-        self.aggregated_po_matches_label.setText("One-to-Many PO: 0")
         self.total_matches_label.setText("Total Matches: 0")
         self.open_folder_button.setEnabled(False)
         self.open_files_button.setEnabled(False)

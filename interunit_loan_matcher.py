@@ -81,6 +81,12 @@ class   ExcelTransactionMatcher:
         self.aggregated_po_matching_logic = AggregatedPOMatchingLogic(self.block_identifier)
         self.narration_matching_logic = NarrationMatchingLogic(self.block_identifier)
         
+        # Performance optimization caches
+        self._block_header_cache1 = {}
+        self._block_header_cache2 = {}
+        self._amount_cache1 = {}
+        self._amount_cache2 = {}
+        
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
         # Read everything as strings to preserve all formatting
@@ -111,6 +117,355 @@ class   ExcelTransactionMatcher:
             debit, credit = 0.0, 0.0
         
         return debit, credit
+    
+    def get_cached_block_header(self, idx, transactions_df, file_num):
+        """Get transaction block header with caching for performance."""
+        cache = self._block_header_cache1 if file_num == 1 else self._block_header_cache2
+        
+        if idx not in cache:
+            cache[idx] = self.block_identifier.find_transaction_block_header(idx, transactions_df)
+        
+        return cache[idx]
+    
+    def get_cached_amounts(self, idx, transactions_df, file_num):
+        """Get amounts with caching for performance."""
+        cache = self._amount_cache1 if file_num == 1 else self._amount_cache2
+        
+        if idx not in cache:
+            row = transactions_df.iloc[idx]
+            cache[idx] = self.extract_amounts_from_strings(row)
+        
+        return cache[idx]
+    
+    def preprocess_all_amounts(self, transactions_df, file_num):
+        """Preprocess all amounts for a file to populate cache."""
+        print(f"Preprocessing amounts for File {file_num}...")
+        cache = self._amount_cache1 if file_num == 1 else self._amount_cache2
+        
+        for idx in range(len(transactions_df)):
+            if idx not in cache:
+                row = transactions_df.iloc[idx]
+                cache[idx] = self.extract_amounts_from_strings(row)
+        
+        print(f"Preprocessed {len(cache)} amounts for File {file_num}")
+    
+    def create_amount_index(self, transactions_df, file_num):
+        """Create an index of transactions by amount for fast lookup."""
+        print(f"Creating amount index for File {file_num}...")
+        amount_index = {}
+        cache = self._amount_cache1 if file_num == 1 else self._amount_cache2
+        
+        for idx in range(len(transactions_df)):
+            if idx in cache:
+                debit, credit = cache[idx]
+                
+                if debit > 0:  # Lender transaction
+                    if debit not in amount_index:
+                        amount_index[debit] = {'lenders': [], 'borrowers': []}
+                    amount_index[debit]['lenders'].append(idx)
+                
+                if credit > 0:  # Borrower transaction
+                    if credit not in amount_index:
+                        amount_index[credit] = {'lenders': [], 'borrowers': []}
+                    amount_index[credit]['borrowers'].append(idx)
+        
+        print(f"Created amount index with {len(amount_index)} unique amounts for File {file_num}")
+        return amount_index
+    
+    def find_lc_matches_optimized(self, transactions1, transactions2, lc_numbers1, lc_numbers2, existing_matches=None, match_id_manager=None):
+        """Optimized LC matching using amount pre-filtering."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED LC MATCHING ===")
+        print(f"Using amount pre-filtering for performance...")
+        
+        # Get all unique amounts that exist in both files
+        common_amounts = set(self.amount_index1.keys()) & set(self.amount_index2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        for amount in common_amounts:
+            # Get all lender/borrower pairs for this amount
+            file1_lenders = self.amount_index1[amount]['lenders']
+            file1_borrowers = self.amount_index1[amount]['borrowers']
+            file2_lenders = self.amount_index2[amount]['lenders']
+            file2_borrowers = self.amount_index2[amount]['borrowers']
+            
+            # Check all possible lender-borrower combinations
+            for lender_idx in file1_lenders:
+                for borrower_idx in file2_borrowers:
+                    if lc_numbers1.iloc[lender_idx] and lc_numbers2.iloc[borrower_idx]:
+                        if lc_numbers1.iloc[lender_idx] == lc_numbers2.iloc[borrower_idx]:
+                            # Found LC match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'LC',
+                                'File1_Index': lender_idx,
+                                'File2_Index': borrower_idx,
+                                'LC_Number': lc_numbers1.iloc[lender_idx],
+                                'Amount': amount
+                            })
+            
+            # Check reverse combinations
+            for lender_idx in file2_lenders:
+                for borrower_idx in file1_borrowers:
+                    if lc_numbers1.iloc[borrower_idx] and lc_numbers2.iloc[lender_idx]:
+                        if lc_numbers1.iloc[borrower_idx] == lc_numbers2.iloc[lender_idx]:
+                            # Found LC match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'LC',
+                                'File1_Index': borrower_idx,
+                                'File2_Index': lender_idx,
+                                'LC_Number': lc_numbers1.iloc[borrower_idx],
+                                'Amount': amount
+                            })
+        
+        print(f"Found {len(matches)} LC matches using optimized method")
+        return matches
+    
+    def find_po_matches_optimized(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_id_manager=None):
+        """Optimized PO matching using amount pre-filtering."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED PO MATCHING ===")
+        print(f"Using amount pre-filtering for performance...")
+        
+        # Get all unique amounts that exist in both files
+        common_amounts = set(self.amount_index1.keys()) & set(self.amount_index2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        for amount in common_amounts:
+            # Get all lender/borrower pairs for this amount
+            file1_lenders = self.amount_index1[amount]['lenders']
+            file1_borrowers = self.amount_index1[amount]['borrowers']
+            file2_lenders = self.amount_index2[amount]['lenders']
+            file2_borrowers = self.amount_index2[amount]['borrowers']
+            
+            # Check all possible lender-borrower combinations
+            for lender_idx in file1_lenders:
+                for borrower_idx in file2_borrowers:
+                    if po_numbers1.iloc[lender_idx] and po_numbers2.iloc[borrower_idx]:
+                        if po_numbers1.iloc[lender_idx] == po_numbers2.iloc[borrower_idx]:
+                            # Found PO match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'PO',
+                                'File1_Index': lender_idx,
+                                'File2_Index': borrower_idx,
+                                'PO_Number': po_numbers1.iloc[lender_idx],
+                                'Amount': amount
+                            })
+            
+            # Check reverse combinations
+            for lender_idx in file2_lenders:
+                for borrower_idx in file1_borrowers:
+                    if po_numbers1.iloc[borrower_idx] and po_numbers2.iloc[lender_idx]:
+                        if po_numbers1.iloc[borrower_idx] == po_numbers2.iloc[lender_idx]:
+                            # Found PO match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'PO',
+                                'File1_Index': borrower_idx,
+                                'File2_Index': lender_idx,
+                                'PO_Number': po_numbers1.iloc[borrower_idx],
+                                'Amount': amount
+                            })
+        
+        print(f"Found {len(matches)} PO matches using optimized method")
+        return matches
+    
+    def find_usd_matches_optimized(self, transactions1, transactions2, usd_amounts1, usd_amounts2, existing_matches=None, match_id_manager=None):
+        """Optimized USD matching using amount pre-filtering."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED USD MATCHING ===")
+        print(f"Using amount pre-filtering for performance...")
+        
+        # Get all unique amounts that exist in both files
+        common_amounts = set(self.amount_index1.keys()) & set(self.amount_index2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        for amount in common_amounts:
+            # Get all lender/borrower pairs for this amount
+            file1_lenders = self.amount_index1[amount]['lenders']
+            file1_borrowers = self.amount_index1[amount]['borrowers']
+            file2_lenders = self.amount_index2[amount]['lenders']
+            file2_borrowers = self.amount_index2[amount]['borrowers']
+            
+            # Check all possible lender-borrower combinations
+            for lender_idx in file1_lenders:
+                for borrower_idx in file2_borrowers:
+                    if usd_amounts1.iloc[lender_idx] and usd_amounts2.iloc[borrower_idx]:
+                        if usd_amounts1.iloc[lender_idx] == usd_amounts2.iloc[borrower_idx]:
+                            # Found USD match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'USD',
+                                'File1_Index': lender_idx,
+                                'File2_Index': borrower_idx,
+                                'USD_Amount': usd_amounts1.iloc[lender_idx],
+                                'Amount': amount
+                            })
+            
+            # Check reverse combinations
+            for lender_idx in file2_lenders:
+                for borrower_idx in file1_borrowers:
+                    if usd_amounts1.iloc[borrower_idx] and usd_amounts2.iloc[lender_idx]:
+                        if usd_amounts1.iloc[borrower_idx] == usd_amounts2.iloc[lender_idx]:
+                            # Found USD match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'USD',
+                                'File1_Index': borrower_idx,
+                                'File2_Index': lender_idx,
+                                'USD_Amount': usd_amounts1.iloc[borrower_idx],
+                                'Amount': amount
+                            })
+        
+        print(f"Found {len(matches)} USD matches using optimized method")
+        return matches
+    
+    def find_narration_matches_optimized(self, transactions1, transactions2, existing_matches=None, match_id_manager=None):
+        """Optimized Narration matching using amount pre-filtering."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED NARRATION MATCHING ===")
+        print(f"Using amount pre-filtering for performance...")
+        
+        # Get all unique amounts that exist in both files
+        common_amounts = set(self.amount_index1.keys()) & set(self.amount_index2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        for amount in common_amounts:
+            # Get all lender/borrower pairs for this amount
+            file1_lenders = self.amount_index1[amount]['lenders']
+            file1_borrowers = self.amount_index1[amount]['borrowers']
+            file2_lenders = self.amount_index2[amount]['lenders']
+            file2_borrowers = self.amount_index2[amount]['borrowers']
+            
+            # Check all possible lender-borrower combinations
+            for lender_idx in file1_lenders:
+                for borrower_idx in file2_borrowers:
+                    # Get narrations for comparison
+                    lender_narration = str(transactions1.iloc[lender_idx, 2]).strip()
+                    borrower_narration = str(transactions2.iloc[borrower_idx, 2]).strip()
+                    
+                    # Check for exact narration match
+                    if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
+                        lender_narration.lower() not in ['nan', 'none', ''] and
+                        borrower_narration.lower() not in ['nan', 'none', ''] and
+                        lender_narration == borrower_narration):
+                        # Found narration match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'Narration',
+                            'File1_Index': lender_idx,
+                            'File2_Index': borrower_idx,
+                            'Narration': lender_narration,
+                            'Amount': amount
+                        })
+            
+            # Check reverse combinations
+            for lender_idx in file2_lenders:
+                for borrower_idx in file1_borrowers:
+                    # Get narrations for comparison
+                    lender_narration = str(transactions2.iloc[lender_idx, 2]).strip()
+                    borrower_narration = str(transactions1.iloc[borrower_idx, 2]).strip()
+                    
+                    # Check for exact narration match
+                    if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
+                        lender_narration.lower() not in ['nan', 'none', ''] and
+                        borrower_narration.lower() not in ['nan', 'none', ''] and
+                        lender_narration == borrower_narration):
+                        # Found narration match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'Narration',
+                            'File1_Index': borrower_idx,
+                            'File2_Index': lender_idx,
+                            'Narration': lender_narration,
+                            'Amount': amount
+                        })
+        
+        print(f"Found {len(matches)} Narration matches using optimized method")
+        return matches
+    
+    def find_aggregated_po_matches_optimized(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_id_manager=None):
+        """Optimized Aggregated PO matching using amount pre-filtering."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED AGGREGATED PO MATCHING ===")
+        print(f"Using amount pre-filtering for performance...")
+        
+        # Get all unique amounts that exist in both files
+        common_amounts = set(self.amount_index1.keys()) & set(self.amount_index2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        # Import regex for PO pattern matching
+        import re
+        from .po_matching_logic import PO_PATTERN
+        
+        for amount in common_amounts:
+            # Get all lender/borrower pairs for this amount
+            file1_lenders = self.amount_index1[amount]['lenders']
+            file1_borrowers = self.amount_index1[amount]['borrowers']
+            file2_lenders = self.amount_index2[amount]['lenders']
+            file2_borrowers = self.amount_index2[amount]['borrowers']
+            
+            # Check all possible lender-borrower combinations
+            for lender_idx in file1_lenders:
+                for borrower_idx in file2_borrowers:
+                    # Get narrations for PO extraction
+                    lender_narration = str(transactions1.iloc[lender_idx, 2]).strip()
+                    borrower_narration = str(transactions2.iloc[borrower_idx, 2]).strip()
+                    
+                    # Extract PO numbers from narrations
+                    lender_pos = re.findall(PO_PATTERN, lender_narration)
+                    borrower_pos = re.findall(PO_PATTERN, borrower_narration)
+                    
+                    # Check if lender has multiple POs and borrower has matching POs
+                    if len(lender_pos) >= 2 and len(borrower_pos) >= 1:
+                        # Check if all lender POs are present in borrower
+                        if all(po in borrower_pos for po in lender_pos):
+                            # Found aggregated PO match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'Aggregated_PO',
+                                'File1_Index': lender_idx,
+                                'File2_Index': borrower_idx,
+                                'PO_Count': len(lender_pos),
+                                'All_POs': lender_pos,
+                                'Amount': amount
+                            })
+            
+            # Check reverse combinations
+            for lender_idx in file2_lenders:
+                for borrower_idx in file1_borrowers:
+                    # Get narrations for PO extraction
+                    lender_narration = str(transactions2.iloc[lender_idx, 2]).strip()
+                    borrower_narration = str(transactions1.iloc[borrower_idx, 2]).strip()
+                    
+                    # Extract PO numbers from narrations
+                    lender_pos = re.findall(PO_PATTERN, lender_narration)
+                    borrower_pos = re.findall(PO_PATTERN, borrower_narration)
+                    
+                    # Check if lender has multiple POs and borrower has matching POs
+                    if len(lender_pos) >= 2 and len(borrower_pos) >= 1:
+                        # Check if all lender POs are present in borrower
+                        if all(po in borrower_pos for po in lender_pos):
+                            # Found aggregated PO match
+                            matches.append({
+                                'match_id': None,
+                                'Match_Type': 'Aggregated_PO',
+                                'File1_Index': borrower_idx,
+                                'File2_Index': lender_idx,
+                                'PO_Count': len(lender_pos),
+                                'All_POs': lender_pos,
+                                'Amount': amount
+                            })
+        
+        print(f"Found {len(matches)} Aggregated PO matches using optimized method")
+        return matches
     
     def extract_lc_numbers(self, description_series):
         """Extract LC numbers from transaction descriptions."""
@@ -404,7 +759,16 @@ class   ExcelTransactionMatcher:
         print(f"File 1: {len(self.transactions1)} rows")
         print(f"File 2: {len(self.transactions2)} rows")
         
-
+        # Preprocess amounts for performance optimization
+        print("Preprocessing amounts for performance...")
+        self.preprocess_all_amounts(self.transactions1, 1)
+        self.preprocess_all_amounts(self.transactions2, 2)
+        
+        # Create amount indexes for fast lookup
+        print("Creating amount indexes for fast lookup...")
+        self.amount_index1 = self.create_amount_index(self.transactions1, 1)
+        self.amount_index2 = self.create_amount_index(self.transactions2, 2)
+        
         print(f"File 1 columns: {list(self.transactions1.columns)}")
         print(f"File 2 columns: {list(self.transactions2.columns)}")
         
@@ -457,7 +821,7 @@ class   ExcelTransactionMatcher:
         
         # Step 1: Find Narration matches (HIGHEST PRIORITY - Most reliable)
         print(f"\nSTEP 1: NARRATION MATCHING")
-        narration_matches = self.narration_matching_logic.find_potential_matches(
+        narration_matches = self.find_narration_matches_optimized(
             transactions1, transactions2, {}, None
         )
         
@@ -491,7 +855,8 @@ class   ExcelTransactionMatcher:
         print(f"File 2: {len(lc_numbers2_unmatched[lc_numbers2_unmatched.notna()])} unmatched LC numbers")
         
         print(f"\nSTEP 2: LC MATCHING")
-        lc_matches = self.lc_matching_logic.find_potential_matches(
+        # Use optimized LC matching for better performance
+        lc_matches = self.find_lc_matches_optimized(
             transactions1, transactions2, lc_numbers1_unmatched, lc_numbers2_unmatched,
             {}, None
         )
@@ -529,7 +894,7 @@ class   ExcelTransactionMatcher:
         
         # Find PO matches on unmatched records with shared state
         print(f"\nSTEP 3: PO MATCHING")
-        po_matches = self.po_matching_logic.find_potential_matches(
+        po_matches = self.find_po_matches_optimized(
             transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched,
             {}, None
         )
@@ -605,7 +970,7 @@ class   ExcelTransactionMatcher:
         
         # Find USD matches on unmatched records with shared state
         print(f"\nSTEP 5: USD MATCHING")
-        usd_matches = self.usd_matching_logic.find_potential_matches(
+        usd_matches = self.find_usd_matches_optimized(
             transactions1, transactions2, usd_amounts1_unmatched, usd_amounts2_unmatched,
             {}, None
         )
@@ -613,42 +978,47 @@ class   ExcelTransactionMatcher:
         # print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
         
         # Step 6: Find Aggregated PO matches on UNMATCHED records
+        # COMMENTED OUT - One-to-many PO matches not working
         print("\n" + "="*60)
-        print("STEP 6: AGGREGATED PO MATCHING (ON UNMATCHED RECORDS)")
+        print("STEP 6: AGGREGATED PO MATCHING - DISABLED")
         print("="*60)
+        print("Aggregated PO matching has been commented out due to issues")
         
-        # Create masks for unmatched records (after Narration, LC, PO, Interunit, and USD matching)
-        narration_lc_po_interunit_usd_matched_indices1 = set()
-        narration_lc_po_interunit_usd_matched_indices2 = set()
+        # # Create masks for unmatched records (after Narration, LC, PO, Interunit, and USD matching)
+        # narration_lc_po_interunit_usd_matched_indices1 = set()
+        # narration_lc_po_interunit_usd_matched_indices2 = set()
+        # 
+        # for match in narration_matches + lc_matches + po_matches + interunit_matches + usd_matches:
+        #     narration_lc_po_interunit_usd_matched_indices1.add(match['File1_Index'])
+        #     narration_lc_po_interunit_usd_matched_indices2.add(match['File2_Index'])
+        # 
+        # # Filter PO numbers to only unmatched records
+        # po_numbers1_unmatched_for_aggregated = po_numbers1.copy()
+        # po_numbers2_unmatched_for_aggregated = po_numbers2.copy()
+        # 
+        # # Mark matched records as None in PO numbers
+        # for idx in narration_lc_po_interunit_usd_matched_indices1:
+        #     if idx < len(po_numbers1_unmatched_for_aggregated):
+        #         po_numbers1_unmatched_for_aggregated.iloc[idx] = None
+        # 
+        # for idx in narration_lc_po_interunit_usd_matched_indices2:
+        #     if idx < len(po_numbers2_unmatched_for_aggregated):
+        #         po_numbers2_unmatched_for_aggregated.iloc[idx] = None
+        # 
+        # print(f"File 1: {len(po_numbers1_unmatched_for_aggregated[po_numbers1_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
+        # print(f"File 2: {len(po_numbers2_unmatched_for_aggregated[po_numbers2_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
+        # 
+        # # Find aggregated PO matches on unmatched records with shared state
+        # print(f"\nSTEP 6: AGGREGATED PO MATCHING")
+        # aggregated_po_matches = self.find_aggregated_po_matches_optimized(
+        #     transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
+        #     {}, None
+        # )
+        # 
+        # # print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
         
-        for match in narration_matches + lc_matches + po_matches + interunit_matches + usd_matches:
-            narration_lc_po_interunit_usd_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_interunit_usd_matched_indices2.add(match['File2_Index'])
-        
-        # Filter PO numbers to only unmatched records
-        po_numbers1_unmatched_for_aggregated = po_numbers1.copy()
-        po_numbers2_unmatched_for_aggregated = po_numbers2.copy()
-        
-        # Mark matched records as None in PO numbers
-        for idx in narration_lc_po_interunit_usd_matched_indices1:
-            if idx < len(po_numbers1_unmatched_for_aggregated):
-                po_numbers1_unmatched_for_aggregated.iloc[idx] = None
-        
-        for idx in narration_lc_po_interunit_usd_matched_indices2:
-            if idx < len(po_numbers2_unmatched_for_aggregated):
-                po_numbers2_unmatched_for_aggregated.iloc[idx] = None
-        
-        print(f"File 1: {len(po_numbers1_unmatched_for_aggregated[po_numbers1_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        print(f"File 2: {len(po_numbers2_unmatched_for_aggregated[po_numbers2_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        
-        # Find aggregated PO matches on unmatched records with shared state
-        print(f"\nSTEP 6: AGGREGATED PO MATCHING")
-        aggregated_po_matches = self.aggregated_po_matching_logic.find_potential_matches(
-            transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
-            {}, None
-        )
-        
-        # print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
+        # Set aggregated_po_matches to empty list since it's disabled
+        aggregated_po_matches = []
         
         # Combine all matches
         all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches + aggregated_po_matches
@@ -690,7 +1060,7 @@ class   ExcelTransactionMatcher:
         print(f"  - PO Matches: {len(po_matches)}")
         print(f"  - Interunit Loan Matches: {len(interunit_matches)}")
         print(f"  - USD Matches: {len(usd_matches)}")
-        print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)}")
+        print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)} (DISABLED)")
         
         return all_matches
     

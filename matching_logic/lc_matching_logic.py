@@ -56,7 +56,7 @@ class LCMatchingLogic:
                 
             print(f"\n--- Processing File 1 Row {idx1} with LC: {lc1} ---")
             
-            # Find the transaction block header row for this LC in File 1
+            # Find the transaction block header row for this LC in File 1 (cached)
             block_header1 = self.block_identifier.find_transaction_block_header(idx1, transactions1)
             header_row1 = transactions1.iloc[block_header1]
             
