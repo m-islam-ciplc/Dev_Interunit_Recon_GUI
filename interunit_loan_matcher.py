@@ -479,6 +479,175 @@ class   ExcelTransactionMatcher:
         
         return self._amount_cache[cache_key]
     
+    def find_matches_block_based_optimized(self, transactions1, transactions2, blocks1, blocks2, 
+                                         lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, 
+                                         interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2):
+        """Find matches using block-based optimization - analyze each block once and determine best match type."""
+        
+        print("\n" + "="*70)
+        print("🚀 BLOCK-BASED OPTIMIZATION - ANALYZE EACH BLOCK ONCE")
+        print("="*70)
+        print("Instead of running each match type sequentially, we analyze each transaction block")
+        print("once and determine the best match type for that block. This eliminates redundant")
+        print("processing and improves performance significantly.")
+        
+        all_matches = []
+        processed_blocks1 = set()
+        processed_blocks2 = set()
+        
+        print(f"\n📊 BLOCK ANALYSIS:")
+        print(f"File 1: {len(blocks1)} transaction blocks")
+        print(f"File 2: {len(blocks2)} transaction blocks")
+        
+        # Create amount-to-block mapping for fast lookup
+        print("\n🔍 Creating amount-to-block mapping for fast lookup...")
+        amount_to_blocks1 = {}
+        amount_to_blocks2 = {}
+        
+        for block_idx, block in enumerate(blocks1):
+            for row_idx in block:
+                if row_idx < len(transactions1):
+                    amounts = self.get_cached_amounts_universal(row_idx, transactions1)
+                    if amounts[0] > 0:  # Debit amount
+                        if amounts[0] not in amount_to_blocks1:
+                            amount_to_blocks1[amounts[0]] = []
+                        amount_to_blocks1[amounts[0]].append((block_idx, row_idx, 'lender'))
+                    if amounts[1] > 0:  # Credit amount
+                        if amounts[1] not in amount_to_blocks1:
+                            amount_to_blocks1[amounts[1]] = []
+                        amount_to_blocks1[amounts[1]].append((block_idx, row_idx, 'borrower'))
+        
+        for block_idx, block in enumerate(blocks2):
+            for row_idx in block:
+                if row_idx < len(transactions2):
+                    amounts = self.get_cached_amounts_universal(row_idx, transactions2)
+                    if amounts[0] > 0:  # Debit amount
+                        if amounts[0] not in amount_to_blocks2:
+                            amount_to_blocks2[amounts[0]] = []
+                        amount_to_blocks2[amounts[0]].append((block_idx, row_idx, 'lender'))
+                    if amounts[1] > 0:  # Credit amount
+                        if amounts[1] not in amount_to_blocks2:
+                            amount_to_blocks2[amounts[1]] = []
+                        amount_to_blocks2[amounts[1]].append((block_idx, row_idx, 'borrower'))
+        
+        print(f"Created amount mappings: {len(amount_to_blocks1)} amounts in File 1, {len(amount_to_blocks2)} amounts in File 2")
+        
+        # Find common amounts between files
+        common_amounts = set(amount_to_blocks1.keys()) & set(amount_to_blocks2.keys())
+        print(f"Found {len(common_amounts)} common amounts between files")
+        
+        # Process each common amount
+        for amount in common_amounts:
+            file1_blocks = amount_to_blocks1[amount]
+            file2_blocks = amount_to_blocks2[amount]
+            
+            # Check all possible block combinations for this amount
+            for block1_info in file1_blocks:
+                block1_idx, row1_idx, role1 = block1_info
+                
+                # Skip if this block is already processed
+                if block1_idx in processed_blocks1:
+                    continue
+                
+                for block2_info in file2_blocks:
+                    block2_idx, row2_idx, role2 = block2_info
+                    
+                    # Skip if this block is already processed
+                    if block2_idx in processed_blocks2:
+                        continue
+                    
+                    # Skip if both are lenders or both are borrowers
+                    if role1 == role2:
+                        continue
+                    
+                    # Determine lender and borrower
+                    if role1 == 'lender':
+                        lender_row1, borrower_row2 = row1_idx, row2_idx
+                        lender_file, borrower_file = 1, 2
+                    else:
+                        lender_row1, borrower_row2 = row2_idx, row1_idx
+                        lender_file, borrower_file = 2, 1
+                    
+                    # Analyze this block pair and determine best match type
+                    match_type, match_data = self.analyze_block_pair(
+                        transactions1, transactions2, blocks1, blocks2,
+                        lender_row1, borrower_row2, lender_file, borrower_file,
+                        lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+                        interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2,
+                        amount
+                    )
+                    
+                    if match_type:
+                        # Create match record
+                        match = {
+                            'match_id': None,
+                            'Match_Type': match_type,
+                            'File1_Index': lender_row1 if lender_file == 1 else borrower_row2,
+                            'File2_Index': borrower_row2 if lender_file == 1 else lender_row1,
+                            'Amount': amount,
+                            **match_data
+                        }
+                        all_matches.append(match)
+                        
+                        # Mark blocks as processed
+                        processed_blocks1.add(block1_idx)
+                        processed_blocks2.add(block2_idx)
+                        
+                        print(f"✅ {match_type} match found: Amount {amount}, Blocks {block1_idx}-{block2_idx}")
+                        break  # Move to next block1
+        
+        print(f"\n📈 BLOCK-BASED MATCHING RESULTS:")
+        print(f"Total matches found: {len(all_matches)}")
+        print(f"Processed blocks File 1: {len(processed_blocks1)}/{len(blocks1)}")
+        print(f"Processed blocks File 2: {len(processed_blocks2)}/{len(blocks2)}")
+        
+        return all_matches
+    
+    def analyze_block_pair(self, transactions1, transactions2, blocks1, blocks2,
+                          lender_row, borrower_row, lender_file, borrower_file,
+                          lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+                          interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2,
+                          amount):
+        """Analyze a block pair and determine the best match type."""
+        
+        # Get narrations
+        lender_narration = self.get_cached_narration(lender_row, transactions1 if lender_file == 1 else transactions2)
+        borrower_narration = self.get_cached_narration(borrower_row, transactions2 if borrower_file == 1 else transactions1)
+        
+        # 1. NARRATION MATCHING (Highest Priority)
+        if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
+            lender_narration.lower() not in ['nan', 'none', ''] and
+            borrower_narration.lower() not in ['nan', 'none', ''] and
+            lender_narration == borrower_narration):
+            return 'Narration', {'Narration': lender_narration}
+        
+        # 2. LC MATCHING
+        lender_lc = self.get_optimized_lc_numbers(lender_file, lender_row)
+        borrower_lc = self.get_optimized_lc_numbers(borrower_file, borrower_row)
+        if lender_lc and borrower_lc and lender_lc == borrower_lc:
+            return 'LC', {'LC_Number': lender_lc}
+        
+        # 3. PO MATCHING
+        lender_po = self.get_optimized_po_numbers(lender_file, lender_row)
+        borrower_po = self.get_optimized_po_numbers(borrower_file, borrower_row)
+        if lender_po and borrower_po and lender_po == borrower_po:
+            return 'PO', {'PO_Number': lender_po}
+        
+        # 4. INTERUNIT MATCHING
+        lender_interunit = self.get_optimized_interunit_accounts(lender_file, lender_row)
+        borrower_interunit = self.get_optimized_interunit_accounts(borrower_file, borrower_row)
+        if lender_interunit and borrower_interunit and lender_interunit == borrower_interunit:
+            return 'Interunit', {'Interunit_Account': lender_interunit}
+        
+        # 5. USD MATCHING
+        lender_usd = self.get_optimized_usd_amounts(lender_file, lender_row)
+        borrower_usd = self.get_optimized_usd_amounts(borrower_file, borrower_row)
+        if lender_usd and borrower_usd and lender_usd == borrower_usd:
+            return 'USD', {'USD_Amount': lender_usd}
+        
+        # No match found
+        return None, {}
+    
     def precompute_all_block_data(self, transactions_df):
         """Precompute all block headers, description rows, and narrations for maximum performance."""
         print("Precomputing all block data for maximum performance...")
@@ -1323,56 +1492,70 @@ class   ExcelTransactionMatcher:
         return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2
     
     def find_potential_matches(self):
-        """Find potential LC, PO, Interunit, and USD matches between the two files (sequential approach)."""
+        """Find potential matches using block-based optimization (analyze each block once)."""
 
-        transactions1, transactions2, _, _, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
+        transactions1, transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2 = self.process_files()
         
-        print("\n" + "="*60)
-        print("STEP 1: NARRATION MATCHING (HIGHEST PRIORITY - Most reliable)")
-        print("="*60)
+        print("\n" + "="*70)
+        print("🚀 BLOCK-BASED OPTIMIZATION - ANALYZE EACH BLOCK ONCE")
+        print("="*70)
+        print("Instead of running each match type sequentially, we analyze each transaction block")
+        print("once and determine the best match type for that block. This eliminates redundant")
+        print("processing and improves performance significantly.")
         
-        # ARCHITECTURAL FIX: Collect all matches first, then assign sequential Match IDs
-        print(f"\nMATCH ID SYSTEM: Post-processing sequential assignment")
-        print(f"Expected sequence: M001, M002, M003... assigned after all matches are found")
-        
-        # Step 1: Find Narration matches (HIGHEST PRIORITY - Most reliable)
-        print(f"\nSTEP 1: NARRATION MATCHING")
-        narration_matches = self.find_narration_matches_optimized(
-            transactions1, transactions2, {}, None
+        # Use block-based optimization for maximum performance
+        all_matches = self.find_matches_block_based_optimized(
+            transactions1, transactions2, blocks1, blocks2,
+            lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+            interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2
         )
         
-        # Step 2: Find LC matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 2: LC MATCHING (ON UNMATCHED RECORDS)")
+        # ARCHITECTURAL FIX: Assign sequential Match IDs to all matches
+        print(f"\n=== ASSIGNING SEQUENTIAL MATCH IDs ===")
+        print(f"Total matches found: {len(all_matches)}")
+        
+        # Initialize Match ID counter
+        match_counter = 1
+        
+        # Assign sequential Match IDs to all matches
+        for i, match in enumerate(all_matches):
+            match_id = f"M{match_counter:03d}"  # Format as M001, M002, M003, etc.
+            old_match_id = match.get('match_id', 'None')
+            match['match_id'] = match_id
+            match_counter += 1
+            print(f"Match {i+1}: Assigned {match_id} to {match.get('Match_Type', 'Unknown')} match (was {old_match_id})")
+        
+        print(f"Assigned {len(all_matches)} sequential Match IDs (M001 to M{match_counter-1:03d})")
+        
+        # Sort matches by the newly assigned sequential Match IDs
+        all_matches.sort(key=lambda x: x['match_id'])
+        print(f"Sorted matches by sequential Match IDs")
+        
+        # Show match breakdown
+        match_types = {}
+        for match in all_matches:
+            match_type = match.get('Match_Type', 'Unknown')
+            match_types[match_type] = match_types.get(match_type, 0) + 1
+        
+        print(f"\n" + "="*60)
+        print("FINAL MATCH SUMMARY")
         print("="*60)
+        print(f"Total matches found: {len(all_matches)}")
+        print(f"Match IDs assigned: M001 to M{match_counter-1:03d}")
         
-        # Create masks for unmatched records (after Narration matching) - OPTIMIZED
-        narration_matched_indices1, narration_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches)
+        print("="*60)
+        print("FINAL RESULTS")
+        print("="*60)
+        print(f"Total Matches: {len(all_matches)}")
+        for match_type, count in match_types.items():
+            print(f"  - {match_type} Matches: {count}")
         
-        # Filter LC numbers to only unmatched records
-        lc_numbers1_unmatched = lc_numbers1.copy()
-        lc_numbers2_unmatched = lc_numbers2.copy()
+        # Clean up all caches to free memory
+        self.clear_all_caches()
         
-        # Mark matched records as None in LC numbers
-        for idx in narration_matched_indices1:
-            if idx < len(lc_numbers1_unmatched):
-                lc_numbers1_unmatched.iloc[idx] = None
-        
-        for idx in narration_matched_indices2:
-            if idx < len(lc_numbers2_unmatched):
-                lc_numbers2_unmatched.iloc[idx] = None
-        
-        print(f"File 1: {len(lc_numbers1_unmatched[lc_numbers1_unmatched.notna()])} unmatched LC numbers")
-        print(f"File 2: {len(lc_numbers2_unmatched[lc_numbers2_unmatched.notna()])} unmatched LC numbers")
-        
-        print(f"\nSTEP 2: LC MATCHING")
-        # Use optimized LC matching for better performance
-        lc_matches = self.find_lc_matches_optimized(
-            transactions1, transactions2, lc_numbers1_unmatched, lc_numbers2_unmatched,
-            {}, None
-        )
-        
-        # print(f"\nLC Matching Results: {len(lc_matches)} matches found")
+        return all_matches
+    
+    def find_parent_transaction_row_with_formatting(self, ws, current_row):
         
         # Step 3: Find PO matches on UNMATCHED records
         print("\n" + "="*60)
