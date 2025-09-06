@@ -285,9 +285,9 @@ class FileSelectionWidget(QWidget):
         section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Select Interunit Loan Ledgers:")
+        title = QLabel("Select Interunit Loan Ledgers")
         title.setProperty("class", "heading")
-        title.setStyleSheet("margin-bottom: 10px;")
+        title.setStyleSheet("margin-bottom: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
@@ -299,9 +299,9 @@ class FileSelectionWidget(QWidget):
         section_layout.addWidget(self.browse_button)
         
         # Selected files section
-        files_label = QLabel("Selected Ledgers:")
+        files_label = QLabel("Selected Ledgers")
         files_label.setProperty("class", "heading")
-        files_label.setStyleSheet("margin-bottom: 5px;")
+        files_label.setStyleSheet("margin-bottom: 8px;")
         files_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(files_label)
         
@@ -497,9 +497,9 @@ class ProcessingWidget(QWidget):
         section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Match Steps")
+        title = QLabel("Match Progress")
         title.setProperty("class", "heading")
-        title.setStyleSheet("margin-bottom: 10px;")
+        title.setStyleSheet("margin-bottom: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
@@ -508,12 +508,12 @@ class ProcessingWidget(QWidget):
         self.step_progresses = {}
         
         steps = [
-            "Narration",
-            "LC",
-            "PO",
-            "Interunit",
-            "USD",
-            "One-to-Many PO"
+            "Narration Matches",
+            "LC Matches",
+            "One to One PO Matches",
+            "Interunit Matches",
+            "USD Matches",
+            "One-to-Many PO Matches"
         ]
         
         for step in steps:
@@ -522,7 +522,7 @@ class ProcessingWidget(QWidget):
             
             # Step name
             step_label = QLabel(f"{step}")
-            step_label.setMinimumWidth(120)
+            step_label.setFixedWidth(180)  # Fixed width for all labels
             step_label.setFont(QFont("Segoe UI", 10))
             step_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             step_layout.addWidget(step_label)
@@ -531,7 +531,7 @@ class ProcessingWidget(QWidget):
             step_progress = QProgressBar()
             step_progress.setRange(0, 100)
             step_progress.setValue(0)
-            step_progress.setMaximumHeight(20)
+            step_progress.setFixedHeight(20)  # Fixed height for all progress bars
             step_progress.setProperty("class", "step-progress")
             step_layout.addWidget(step_progress)
             
@@ -545,9 +545,9 @@ class ProcessingWidget(QWidget):
         section_layout.addSpacing(10)
         
         # Overall progress section
-        overall_label = QLabel("Overall Progress:")
+        overall_label = QLabel("Overall Progress")
         overall_label.setProperty("class", "heading")
-        overall_label.setStyleSheet("margin-bottom: 10px;")
+        overall_label.setStyleSheet("margin-bottom: 8px;")
         overall_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(overall_label)
         
@@ -569,14 +569,14 @@ class ProcessingWidget(QWidget):
         
     def complete_step(self, step_name: str, matches_found: int):
         """Mark a step as completed"""
-        # Map full step names to short names
+        # Map full step names to display names
         step_mapping = {
-            "Narration Matching": "Narration",
-            "LC Matching": "LC",
-            "PO Matching": "PO",
-            "Interunit Matching": "Interunit",
-            "USD Matching": "USD",
-            "Aggregated PO Matching": "One-to-Many PO"
+            "Narration Matching": "Narration Matches",
+            "LC Matching": "LC Matches",
+            "PO Matching": "One to One PO Matches",
+            "Interunit Matching": "Interunit Matches",
+            "USD Matching": "USD Matches",
+            "Aggregated PO Matching": "One-to-Many PO Matches"
         }
         
         short_name = step_mapping.get(step_name, step_name)
@@ -624,7 +624,7 @@ class ResultsWidget(QWidget):
         # Title
         title = QLabel("Match Summary")
         title.setProperty("class", "heading")
-        title.setStyleSheet("margin-bottom: 10px;")
+        title.setStyleSheet("margin-bottom: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
@@ -729,9 +729,9 @@ class LogWidget(QWidget):
         section_container.setLayout(section_layout)
         
         # Title
-        title = QLabel("Process Log:")
+        title = QLabel("Process Log")
         title.setProperty("class", "heading")
-        title.setStyleSheet("margin-bottom: 10px;")
+        title.setStyleSheet("margin-bottom: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         section_layout.addWidget(title)
         
@@ -838,7 +838,7 @@ class MainWindow(QMainWindow):
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-weight: 600;
                 color: #2c3e50;
-                font-size: 20px;
+                font-size: 16px;
             }
             
             /* Section Containers with Windows Dialog Style */
