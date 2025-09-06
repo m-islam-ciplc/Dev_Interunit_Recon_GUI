@@ -67,9 +67,15 @@ class USDMatchingLogic:
             header_row1 = transactions1.iloc[block_header1]
             
             # Extract amounts and determine transaction type for File 1
-            # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
-            file1_debit = header_row1.iloc[7] if pd.notna(header_row1.iloc[7]) else 0
-            file1_credit = header_row1.iloc[8] if pd.notna(header_row1.iloc[8]) else 0
+            # Convert string amounts to numeric for calculations
+            file1_debit_str = str(header_row1.iloc[7]) if pd.notna(header_row1.iloc[7]) else '0'
+            file1_credit_str = str(header_row1.iloc[8]) if pd.notna(header_row1.iloc[8]) else '0'
+            
+            try:
+                file1_debit = float(file1_debit_str.replace(',', '')) if file1_debit_str.replace('.', '').replace(',', '').isdigit() else 0.0
+                file1_credit = float(file1_credit_str.replace(',', '')) if file1_credit_str.replace('.', '').replace(',', '').isdigit() else 0.0
+            except (ValueError, TypeError):
+                file1_debit, file1_credit = 0.0, 0.0
             
             file1_is_lender = file1_debit > 0
             file1_is_borrower = file1_credit > 0
@@ -89,9 +95,15 @@ class USDMatchingLogic:
                 header_row2 = transactions2.iloc[block_header2]
                 
                 # Extract amounts and determine transaction type for File 2
-                # Based on investigation: amounts are in columns 8 and 9 (iloc[7] and iloc[8])
-                file2_debit = header_row2.iloc[7] if pd.notna(header_row2.iloc[7]) else 0
-                file2_credit = header_row2.iloc[8] if pd.notna(header_row2.iloc[8]) else 0
+                # Convert string amounts to numeric for calculations
+                file2_debit_str = str(header_row2.iloc[7]) if pd.notna(header_row2.iloc[7]) else '0'
+                file2_credit_str = str(header_row2.iloc[8]) if pd.notna(header_row2.iloc[8]) else '0'
+                
+                try:
+                    file2_debit = float(file2_debit_str.replace(',', '')) if file2_debit_str.replace('.', '').replace(',', '').isdigit() else 0.0
+                    file2_credit = float(file2_credit_str.replace(',', '')) if file2_credit_str.replace('.', '').replace(',', '').isdigit() else 0.0
+                except (ValueError, TypeError):
+                    file2_debit, file2_credit = 0.0, 0.0
                 
                 file2_is_lender = file2_debit > 0
                 file2_is_borrower = file2_credit > 0
