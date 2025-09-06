@@ -98,6 +98,31 @@ class   ExcelTransactionMatcher:
         self._cached_formatting_data1 = None
         self._cached_formatting_data2 = None
         
+        # Compiled regex patterns for performance
+        self._compiled_lc_pattern = re.compile(LC_PATTERN)
+        self._compiled_po_pattern = re.compile(PO_PATTERN)
+        self._compiled_usd_pattern = re.compile(USD_PATTERN)
+        self._compiled_interunit_pattern = re.compile(r'([A-Z]{2,4})#(\d{4,6})')
+        
+        # Cached extracted data
+        self._cached_extracted_data = None
+        
+        # Optimized data access caches
+        self._lc_numbers1_array = None
+        self._lc_numbers2_array = None
+        self._po_numbers1_array = None
+        self._po_numbers2_array = None
+        self._usd_amounts1_array = None
+        self._usd_amounts2_array = None
+        self._interunit_accounts1_array = None
+        self._interunit_accounts2_array = None
+        
+        # Additional performance caches
+        self._block_header_cache = {}  # Universal block header cache
+        self._description_row_cache = {}  # Universal description row cache
+        self._narration_cache = {}  # Cached narration strings
+        self._amount_cache = {}  # Universal amount cache
+        
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
         # Read everything as strings to preserve all formatting
@@ -116,14 +141,24 @@ class   ExcelTransactionMatcher:
         return metadata, transactions
     
     def extract_amounts_from_strings(self, row):
-        """Extract amounts from row data that's loaded as strings."""
-        debit_str = str(row.iloc[7]) if pd.notna(row.iloc[7]) else '0'
-        credit_str = str(row.iloc[8]) if pd.notna(row.iloc[8]) else '0'
+        """Extract amounts from row data that's loaded as strings - OPTIMIZED."""
+        # Get raw values once
+        debit_raw = row.iloc[7] if pd.notna(row.iloc[7]) else '0'
+        credit_raw = row.iloc[8] if pd.notna(row.iloc[8]) else '0'
         
-        # Convert to float, handling commas and empty strings
+        # Convert to strings once
+        debit_str = str(debit_raw)
+        credit_str = str(credit_raw)
+        
+        # Optimized numeric conversion
         try:
-            debit = float(debit_str.replace(',', '')) if debit_str.replace('.', '').replace(',', '').isdigit() else 0.0
-            credit = float(credit_str.replace(',', '')) if credit_str.replace('.', '').replace(',', '').isdigit() else 0.0
+            # Remove commas and check if numeric in one pass
+            debit_clean = debit_str.replace(',', '')
+            credit_clean = credit_str.replace(',', '')
+            
+            # Use faster numeric check
+            debit = float(debit_clean) if debit_clean.replace('.', '').isdigit() else 0.0
+            credit = float(credit_clean) if credit_clean.replace('.', '').isdigit() else 0.0
         except (ValueError, TypeError):
             debit, credit = 0.0, 0.0
         
@@ -254,6 +289,243 @@ class   ExcelTransactionMatcher:
             self._cached_wb2 = None
             self._cached_ws2 = None
     
+    def clear_all_caches(self):
+        """Clear all caches to free memory."""
+        # Clear workbook caches
+        self.close_cached_workbooks()
+        
+        # Clear other caches
+        self._cached_blocks1 = None
+        self._cached_blocks2 = None
+        self._cached_formatting_data1 = None
+        self._cached_formatting_data2 = None
+        self._cached_extracted_data = None
+        
+        # Clear amount caches
+        self._amount_cache1.clear()
+        self._amount_cache2.clear()
+        self._block_header_cache1.clear()
+        self._block_header_cache2.clear()
+        
+        # Clear additional performance caches
+        self._block_header_cache.clear()
+        self._description_row_cache.clear()
+        self._narration_cache.clear()
+        self._amount_cache.clear()
+        
+        print("All caches cleared for memory management")
+    
+    def create_output_files_optimized(self, all_matches, transactions1, transactions2, metadata1, metadata2):
+        """Create output files using optimized batch operations."""
+        print("Creating output files with optimized batch operations...")
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+        
+        # Prepare data for batch insertion
+        output_data = []
+        
+        for match in all_matches:
+            file1_idx = match['File1_Index']
+            file2_idx = match['File2_Index']
+            match_type = match.get('Match_Type', 'Unknown')
+            match_id = match.get('match_id', 'Unknown')
+            
+            # Get cached data for performance
+            file1_header = self.get_cached_block_header_universal(file1_idx, transactions1)
+            file2_header = self.get_cached_block_header_universal(file2_idx, transactions2)
+            
+            file1_desc = self.get_cached_description_row_universal(file1_idx, transactions1)
+            file2_desc = self.get_cached_description_row_universal(file2_idx, transactions2)
+            
+            file1_narration = self.get_cached_narration(file1_desc, transactions1) if file1_desc else ""
+            file2_narration = self.get_cached_narration(file2_desc, transactions2) if file2_desc else ""
+            
+            file1_amounts = self.get_cached_amounts_universal(file1_header, transactions1)
+            file2_amounts = self.get_cached_amounts_universal(file2_header, transactions2)
+            
+            # Create audit info
+            audit_info = self.create_audit_info(match)
+            
+            # Prepare row data
+            row_data = [
+                match_id,
+                match_type,
+                file1_idx,
+                file2_idx,
+                file1_narration,
+                file2_narration,
+                file1_amounts[0],  # debit
+                file1_amounts[1],  # credit
+                file2_amounts[0],  # debit
+                file2_amounts[1],  # credit
+                audit_info
+            ]
+            
+            output_data.append(row_data)
+        
+        # Create DataFrame for batch operations
+        output_df = pd.DataFrame(output_data, columns=[
+            'Match_ID', 'Match_Type', 'File1_Index', 'File2_Index',
+            'File1_Narration', 'File2_Narration', 'File1_Debit', 'File1_Credit',
+            'File2_Debit', 'File2_Credit', 'Audit_Info'
+        ])
+        
+        # Save to Excel with optimized formatting
+        output_file = os.path.join(OUTPUT_FOLDER, f"matched_transactions{OUTPUT_SUFFIX}.xlsx")
+        
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            # Write metadata
+            metadata1.to_excel(writer, sheet_name='File1_Metadata', index=False, header=False)
+            metadata2.to_excel(writer, sheet_name='File2_Metadata', index=False, header=False)
+            
+            # Write matches with optimized formatting
+            output_df.to_excel(writer, sheet_name='Matches', index=False)
+            
+            # Get the worksheet for formatting
+            worksheet = writer.sheets['Matches']
+            
+            # Apply formatting in batch
+            self._apply_batch_formatting(worksheet, len(output_data))
+        
+        print(f"Output file created: {output_file}")
+        return output_file
+    
+    def _apply_batch_formatting(self, worksheet, num_rows):
+        """Apply formatting in batch for better performance."""
+        # Set column widths
+        column_widths = {
+            'A': 9.00, 'B': 30.00, 'C': 12.00, 'D': 10.33, 'E': 60.00,
+            'F': 5.00, 'G': 5.00, 'H': 12.78, 'I': 9.00, 'J': 13.78, 'K': 14.22
+        }
+        
+        for col, width in column_widths.items():
+            worksheet.column_dimensions[col].width = width
+        
+        # Format amount columns in batch
+        for row in range(2, num_rows + 2):  # Skip header row
+            for col in ['H', 'I', 'J', 'K']:  # Amount columns
+                cell = worksheet[f"{col}{row}"]
+                if cell.value is not None:
+                    cell.number_format = '#,##0.00'
+    
+    def create_optimized_arrays(self, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, 
+                               usd_amounts1, usd_amounts2, interunit_accounts1, interunit_accounts2):
+        """Create optimized numpy arrays for faster access in matching loops."""
+        print("Creating optimized arrays for faster data access...")
+        
+        # Convert Series to numpy arrays for faster access
+        self._lc_numbers1_array = lc_numbers1.values
+        self._lc_numbers2_array = lc_numbers2.values
+        self._po_numbers1_array = po_numbers1.values
+        self._po_numbers2_array = po_numbers2.values
+        self._usd_amounts1_array = usd_amounts1.values
+        self._usd_amounts2_array = usd_amounts2.values
+        self._interunit_accounts1_array = interunit_accounts1.values
+        self._interunit_accounts2_array = interunit_accounts2.values
+        
+        print("Optimized arrays created successfully")
+    
+    def create_unmatched_indices_optimized(self, *match_lists):
+        """Create unmatched indices efficiently without list concatenation."""
+        matched_indices1 = set()
+        matched_indices2 = set()
+        
+        # Process all match lists in one pass
+        for match_list in match_lists:
+            for match in match_list:
+                if 'File1_Index' in match:
+                    matched_indices1.add(match['File1_Index'])
+                if 'File2_Index' in match:
+                    matched_indices2.add(match['File2_Index'])
+        
+        return matched_indices1, matched_indices2
+    
+    def get_cached_block_header_universal(self, row_idx, transactions_df):
+        """Get block header with universal caching for maximum performance."""
+        cache_key = f"{id(transactions_df)}_{row_idx}"
+        
+        if cache_key not in self._block_header_cache:
+            self._block_header_cache[cache_key] = self.block_identifier.find_transaction_block_header(row_idx, transactions_df)
+        
+        return self._block_header_cache[cache_key]
+    
+    def get_cached_description_row_universal(self, row_idx, transactions_df):
+        """Get description row with universal caching for maximum performance."""
+        cache_key = f"{id(transactions_df)}_{row_idx}"
+        
+        if cache_key not in self._description_row_cache:
+            self._description_row_cache[cache_key] = self.block_identifier.find_description_row_in_block(row_idx, transactions_df)
+        
+        return self._description_row_cache[cache_key]
+    
+    def get_cached_narration(self, row_idx, transactions_df):
+        """Get narration with caching for maximum performance."""
+        cache_key = f"{id(transactions_df)}_{row_idx}"
+        
+        if cache_key not in self._narration_cache:
+            narration = str(transactions_df.iloc[row_idx, 2]).strip()
+            self._narration_cache[cache_key] = narration
+        
+        return self._narration_cache[cache_key]
+    
+    def get_cached_amounts_universal(self, row_idx, transactions_df):
+        """Get amounts with universal caching for maximum performance."""
+        cache_key = f"{id(transactions_df)}_{row_idx}"
+        
+        if cache_key not in self._amount_cache:
+            row = transactions_df.iloc[row_idx]
+            self._amount_cache[cache_key] = self.extract_amounts_from_strings(row)
+        
+        return self._amount_cache[cache_key]
+    
+    def precompute_all_block_data(self, transactions_df):
+        """Precompute all block headers, description rows, and narrations for maximum performance."""
+        print("Precomputing all block data for maximum performance...")
+        
+        for idx in range(len(transactions_df)):
+            # Precompute block header
+            self.get_cached_block_header_universal(idx, transactions_df)
+            
+            # Precompute description row
+            self.get_cached_description_row_universal(idx, transactions_df)
+            
+            # Precompute narration
+            self.get_cached_narration(idx, transactions_df)
+            
+            # Precompute amounts
+            self.get_cached_amounts_universal(idx, transactions_df)
+        
+        print(f"Precomputed block data for {len(transactions_df)} rows")
+    
+    def get_optimized_lc_numbers(self, file_num, idx):
+        """Get LC numbers using optimized array access."""
+        if file_num == 1:
+            return self._lc_numbers1_array[idx] if idx < len(self._lc_numbers1_array) else None
+        else:
+            return self._lc_numbers2_array[idx] if idx < len(self._lc_numbers2_array) else None
+    
+    def get_optimized_po_numbers(self, file_num, idx):
+        """Get PO numbers using optimized array access."""
+        if file_num == 1:
+            return self._po_numbers1_array[idx] if idx < len(self._po_numbers1_array) else None
+        else:
+            return self._po_numbers2_array[idx] if idx < len(self._po_numbers2_array) else None
+    
+    def get_optimized_usd_amounts(self, file_num, idx):
+        """Get USD amounts using optimized array access."""
+        if file_num == 1:
+            return self._usd_amounts1_array[idx] if idx < len(self._usd_amounts1_array) else None
+        else:
+            return self._usd_amounts2_array[idx] if idx < len(self._usd_amounts2_array) else None
+    
+    def get_optimized_interunit_accounts(self, file_num, idx):
+        """Get interunit accounts using optimized array access."""
+        if file_num == 1:
+            return self._interunit_accounts1_array[idx] if idx < len(self._interunit_accounts1_array) else None
+        else:
+            return self._interunit_accounts2_array[idx] if idx < len(self._interunit_accounts2_array) else None
+    
     def get_cached_block_header(self, idx, transactions_df, file_num):
         """Get transaction block header with caching for performance."""
         cache = self._block_header_cache1 if file_num == 1 else self._block_header_cache2
@@ -329,32 +601,34 @@ class   ExcelTransactionMatcher:
             # Check all possible lender-borrower combinations
             for lender_idx in file1_lenders:
                 for borrower_idx in file2_borrowers:
-                    if lc_numbers1.iloc[lender_idx] and lc_numbers2.iloc[borrower_idx]:
-                        if lc_numbers1.iloc[lender_idx] == lc_numbers2.iloc[borrower_idx]:
-                            # Found LC match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'LC',
-                                'File1_Index': lender_idx,
-                                'File2_Index': borrower_idx,
-                                'LC_Number': lc_numbers1.iloc[lender_idx],
-                                'Amount': amount
-                            })
+                    lc1 = self.get_optimized_lc_numbers(1, lender_idx)
+                    lc2 = self.get_optimized_lc_numbers(2, borrower_idx)
+                    if lc1 and lc2 and lc1 == lc2:
+                        # Found LC match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'LC',
+                            'File1_Index': lender_idx,
+                            'File2_Index': borrower_idx,
+                            'LC_Number': lc1,
+                            'Amount': amount
+                        })
             
             # Check reverse combinations
             for lender_idx in file2_lenders:
                 for borrower_idx in file1_borrowers:
-                    if lc_numbers1.iloc[borrower_idx] and lc_numbers2.iloc[lender_idx]:
-                        if lc_numbers1.iloc[borrower_idx] == lc_numbers2.iloc[lender_idx]:
-                            # Found LC match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'LC',
-                                'File1_Index': borrower_idx,
-                                'File2_Index': lender_idx,
-                                'LC_Number': lc_numbers1.iloc[borrower_idx],
-                                'Amount': amount
-                            })
+                    lc1 = self.get_optimized_lc_numbers(1, borrower_idx)
+                    lc2 = self.get_optimized_lc_numbers(2, lender_idx)
+                    if lc1 and lc2 and lc1 == lc2:
+                        # Found LC match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'LC',
+                            'File1_Index': borrower_idx,
+                            'File2_Index': lender_idx,
+                            'LC_Number': lc1,
+                            'Amount': amount
+                        })
         
         print(f"Found {len(matches)} LC matches using optimized method")
         return matches
@@ -380,32 +654,34 @@ class   ExcelTransactionMatcher:
             # Check all possible lender-borrower combinations
             for lender_idx in file1_lenders:
                 for borrower_idx in file2_borrowers:
-                    if po_numbers1.iloc[lender_idx] and po_numbers2.iloc[borrower_idx]:
-                        if po_numbers1.iloc[lender_idx] == po_numbers2.iloc[borrower_idx]:
-                            # Found PO match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'PO',
-                                'File1_Index': lender_idx,
-                                'File2_Index': borrower_idx,
-                                'PO_Number': po_numbers1.iloc[lender_idx],
-                                'Amount': amount
-                            })
+                    po1 = self.get_optimized_po_numbers(1, lender_idx)
+                    po2 = self.get_optimized_po_numbers(2, borrower_idx)
+                    if po1 and po2 and po1 == po2:
+                        # Found PO match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'PO',
+                            'File1_Index': lender_idx,
+                            'File2_Index': borrower_idx,
+                            'PO_Number': po1,
+                            'Amount': amount
+                        })
             
             # Check reverse combinations
             for lender_idx in file2_lenders:
                 for borrower_idx in file1_borrowers:
-                    if po_numbers1.iloc[borrower_idx] and po_numbers2.iloc[lender_idx]:
-                        if po_numbers1.iloc[borrower_idx] == po_numbers2.iloc[lender_idx]:
-                            # Found PO match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'PO',
-                                'File1_Index': borrower_idx,
-                                'File2_Index': lender_idx,
-                                'PO_Number': po_numbers1.iloc[borrower_idx],
-                                'Amount': amount
-                            })
+                    po1 = self.get_optimized_po_numbers(1, borrower_idx)
+                    po2 = self.get_optimized_po_numbers(2, lender_idx)
+                    if po1 and po2 and po1 == po2:
+                        # Found PO match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'PO',
+                            'File1_Index': borrower_idx,
+                            'File2_Index': lender_idx,
+                            'PO_Number': po1,
+                            'Amount': amount
+                        })
         
         print(f"Found {len(matches)} PO matches using optimized method")
         return matches
@@ -431,32 +707,34 @@ class   ExcelTransactionMatcher:
             # Check all possible lender-borrower combinations
             for lender_idx in file1_lenders:
                 for borrower_idx in file2_borrowers:
-                    if usd_amounts1.iloc[lender_idx] and usd_amounts2.iloc[borrower_idx]:
-                        if usd_amounts1.iloc[lender_idx] == usd_amounts2.iloc[borrower_idx]:
-                            # Found USD match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'USD',
-                                'File1_Index': lender_idx,
-                                'File2_Index': borrower_idx,
-                                'USD_Amount': usd_amounts1.iloc[lender_idx],
-                                'Amount': amount
-                            })
+                    usd1 = self.get_optimized_usd_amounts(1, lender_idx)
+                    usd2 = self.get_optimized_usd_amounts(2, borrower_idx)
+                    if usd1 and usd2 and usd1 == usd2:
+                        # Found USD match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'USD',
+                            'File1_Index': lender_idx,
+                            'File2_Index': borrower_idx,
+                            'USD_Amount': usd1,
+                            'Amount': amount
+                        })
             
             # Check reverse combinations
             for lender_idx in file2_lenders:
                 for borrower_idx in file1_borrowers:
-                    if usd_amounts1.iloc[borrower_idx] and usd_amounts2.iloc[lender_idx]:
-                        if usd_amounts1.iloc[borrower_idx] == usd_amounts2.iloc[lender_idx]:
-                            # Found USD match
-                            matches.append({
-                                'match_id': None,
-                                'Match_Type': 'USD',
-                                'File1_Index': borrower_idx,
-                                'File2_Index': lender_idx,
-                                'USD_Amount': usd_amounts1.iloc[borrower_idx],
-                                'Amount': amount
-                            })
+                    usd1 = self.get_optimized_usd_amounts(1, borrower_idx)
+                    usd2 = self.get_optimized_usd_amounts(2, lender_idx)
+                    if usd1 and usd2 and usd1 == usd2:
+                        # Found USD match
+                        matches.append({
+                            'match_id': None,
+                            'Match_Type': 'USD',
+                            'File1_Index': borrower_idx,
+                            'File2_Index': lender_idx,
+                            'USD_Amount': usd1,
+                            'Amount': amount
+                        })
         
         print(f"Found {len(matches)} USD matches using optimized method")
         return matches
@@ -482,9 +760,9 @@ class   ExcelTransactionMatcher:
             # Check all possible lender-borrower combinations
             for lender_idx in file1_lenders:
                 for borrower_idx in file2_borrowers:
-                    # Get narrations for comparison
-                    lender_narration = str(transactions1.iloc[lender_idx, 2]).strip()
-                    borrower_narration = str(transactions2.iloc[borrower_idx, 2]).strip()
+                    # Get narrations for comparison using cached method
+                    lender_narration = self.get_cached_narration(lender_idx, transactions1)
+                    borrower_narration = self.get_cached_narration(borrower_idx, transactions2)
                     
                     # Check for exact narration match
                     if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
@@ -504,9 +782,9 @@ class   ExcelTransactionMatcher:
             # Check reverse combinations
             for lender_idx in file2_lenders:
                 for borrower_idx in file1_borrowers:
-                    # Get narrations for comparison
-                    lender_narration = str(transactions2.iloc[lender_idx, 2]).strip()
-                    borrower_narration = str(transactions1.iloc[borrower_idx, 2]).strip()
+                    # Get narrations for comparison using cached method
+                    lender_narration = self.get_cached_narration(lender_idx, transactions2)
+                    borrower_narration = self.get_cached_narration(borrower_idx, transactions1)
                     
                     # Check for exact narration match
                     if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
@@ -630,13 +908,13 @@ class   ExcelTransactionMatcher:
             # Check all possible lender-borrower combinations
             for lender_idx in file1_lenders:
                 for borrower_idx in file2_borrowers:
-                    # Get narrations for PO extraction
-                    lender_narration = str(transactions1.iloc[lender_idx, 2]).strip()
-                    borrower_narration = str(transactions2.iloc[borrower_idx, 2]).strip()
+                    # Get narrations for PO extraction using cached method
+                    lender_narration = self.get_cached_narration(lender_idx, transactions1)
+                    borrower_narration = self.get_cached_narration(borrower_idx, transactions2)
                     
-                    # Extract PO numbers from narrations
-                    lender_pos = re.findall(PO_PATTERN, lender_narration)
-                    borrower_pos = re.findall(PO_PATTERN, borrower_narration)
+                    # Extract PO numbers from narrations using compiled pattern
+                    lender_pos = self._compiled_po_pattern.findall(lender_narration)
+                    borrower_pos = self._compiled_po_pattern.findall(borrower_narration)
                     
                     # Check if lender has multiple POs and borrower has matching POs
                     if len(lender_pos) >= 2 and len(borrower_pos) >= 1:
@@ -656,13 +934,13 @@ class   ExcelTransactionMatcher:
             # Check reverse combinations
             for lender_idx in file2_lenders:
                 for borrower_idx in file1_borrowers:
-                    # Get narrations for PO extraction
-                    lender_narration = str(transactions2.iloc[lender_idx, 2]).strip()
-                    borrower_narration = str(transactions1.iloc[borrower_idx, 2]).strip()
+                    # Get narrations for PO extraction using cached method
+                    lender_narration = self.get_cached_narration(lender_idx, transactions2)
+                    borrower_narration = self.get_cached_narration(borrower_idx, transactions1)
                     
-                    # Extract PO numbers from narrations
-                    lender_pos = re.findall(PO_PATTERN, lender_narration)
-                    borrower_pos = re.findall(PO_PATTERN, borrower_narration)
+                    # Extract PO numbers from narrations using compiled pattern
+                    lender_pos = self._compiled_po_pattern.findall(lender_narration)
+                    borrower_pos = self._compiled_po_pattern.findall(borrower_narration)
                     
                     # Check if lender has multiple POs and borrower has matching POs
                     if len(lender_pos) >= 2 and len(borrower_pos) >= 1:
@@ -689,7 +967,7 @@ class   ExcelTransactionMatcher:
                 return None
             
             # Pattern for LC numbers: L/C-123/456, LC-123/456, or similar formats
-            match = re.search(LC_PATTERN, str(description).upper())
+            match = self._compiled_lc_pattern.search(str(description).upper())
             return match.group() if match else None
         
         return description_series.apply(extract_single_lc)
@@ -701,7 +979,7 @@ class   ExcelTransactionMatcher:
                 return None
             
             # Pattern for PO numbers: XXX/PO/YYYY/M/NNNNN format
-            match = re.search(PO_PATTERN, str(description).upper())
+            match = self._compiled_po_pattern.search(str(description).upper())
             return match.group() if match else None
         
         return description_series.apply(extract_single_po)
@@ -811,20 +1089,20 @@ class   ExcelTransactionMatcher:
         
         return pd.Series(po_numbers)
 
-    def load_workbooks_and_extract_data(self):
+    def load_workbooks_and_extract_data_optimized(self):
         """
-        Load Excel workbooks once and extract all required data in a single pass.
-        This optimization reduces file I/O operations from 4 to 1 per file.
+        Extract all required data using cached workbooks and compiled regex patterns.
+        This is the most optimized version that reuses cached data.
         """
-        print("Loading workbooks and extracting data...")
+        if self._cached_extracted_data is not None:
+            print("Using cached extracted data...")
+            return self._cached_extracted_data
         
-        # Load File 1 workbook once
-        wb1 = openpyxl.load_workbook(self.file1_path, data_only=True)
-        ws1 = wb1.active
+        print("Extracting data using cached workbooks and compiled regex...")
         
-        # Load File 2 workbook once  
-        wb2 = openpyxl.load_workbook(self.file2_path, data_only=True)
-        ws2 = wb2.active
+        # Use cached workbooks (already loaded)
+        ws1 = self._cached_ws1
+        ws2 = self._cached_ws2
         
         # Extract all data from File 1
         lc_numbers1 = []
@@ -832,27 +1110,30 @@ class   ExcelTransactionMatcher:
         usd_amounts1 = []
         interunit_accounts1 = []
         
-        # Process File 1 rows 9 onwards (same logic as individual methods)
+        # Process File 1 rows 9 onwards (optimized with compiled regex)
         for row in range(9, ws1.max_row + 1):
             narration = ws1.cell(row=row, column=3).value  # Column C is narration
             if narration:
-                # Extract LC numbers
-                lc_matches = re.findall(LC_PATTERN, str(narration).upper())
+                # Cache upper case conversion
+                narration_upper = str(narration).upper()
+                
+                # Extract LC numbers using compiled pattern
+                lc_matches = self._compiled_lc_pattern.findall(narration_upper)
                 if lc_matches:
                     lc_numbers1.append((row, lc_matches[0]))
                 
-                # Extract PO numbers
-                po_matches = re.findall(PO_PATTERN, str(narration).upper())
+                # Extract PO numbers using compiled pattern
+                po_matches = self._compiled_po_pattern.findall(narration_upper)
                 if po_matches:
                     po_numbers1.append((row, po_matches[0]))
                 
-                # Extract USD amounts
-                usd_matches = re.findall(USD_PATTERN, str(narration).upper())
+                # Extract USD amounts using compiled pattern
+                usd_matches = self._compiled_usd_pattern.findall(narration_upper)
                 if usd_matches:
                     usd_amounts1.append((row, usd_matches[0]))
                 
-                # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
-                interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
+                # Extract interunit accounts using compiled pattern
+                interunit_matches = self._compiled_interunit_pattern.findall(narration_upper)
                 if interunit_matches:
                     interunit_accounts1.append((row, f"{interunit_matches[0][0]}#{interunit_matches[0][1]}"))
         
@@ -891,27 +1172,30 @@ class   ExcelTransactionMatcher:
         usd_amounts2 = []
         interunit_accounts2 = []
         
-        # Process File 2 rows 9 onwards
+        # Process File 2 rows 9 onwards (optimized with compiled regex)
         for row in range(9, ws2.max_row + 1):
             narration = ws2.cell(row=row, column=3).value  # Column C is narration
             if narration:
-                # Extract LC numbers
-                lc_matches = re.findall(LC_PATTERN, str(narration).upper())
+                # Cache upper case conversion
+                narration_upper = str(narration).upper()
+                
+                # Extract LC numbers using compiled pattern
+                lc_matches = self._compiled_lc_pattern.findall(narration_upper)
                 if lc_matches:
                     lc_numbers2.append((row, lc_matches[0]))
                 
-                # Extract PO numbers
-                po_matches = re.findall(PO_PATTERN, str(narration).upper())
+                # Extract PO numbers using compiled pattern
+                po_matches = self._compiled_po_pattern.findall(narration_upper)
                 if po_matches:
                     po_numbers2.append((row, po_matches[0]))
                 
-                # Extract USD amounts
-                usd_matches = re.findall(USD_PATTERN, str(narration).upper())
+                # Extract USD amounts using compiled pattern
+                usd_matches = self._compiled_usd_pattern.findall(narration_upper)
                 if usd_matches:
                     usd_amounts2.append((row, usd_matches[0]))
                 
-                # Extract interunit accounts (using the same pattern as interunit_loan_matching_logic)
-                interunit_matches = re.findall(r'([A-Z]{2,4})#(\d{4,6})', str(narration).upper())
+                # Extract interunit accounts using compiled pattern
+                interunit_matches = self._compiled_interunit_pattern.findall(narration_upper)
                 if interunit_matches:
                     interunit_accounts2.append((row, f"{interunit_matches[0][0]}#{interunit_matches[0][1]}"))
         
@@ -944,15 +1228,12 @@ class   ExcelTransactionMatcher:
             if 0 <= df_index < total_rows2:
                 interunit_accounts2_series.iloc[df_index] = account
         
-        # Close workbooks
-        wb1.close()
-        wb2.close()
-        
         print(f"Data extraction complete:")
         print(f"  File 1: {len(lc_numbers1)} LC, {len(po_numbers1)} PO, {len(usd_amounts1)} USD, {len(interunit_accounts1)} Interunit")
         print(f"  File 2: {len(lc_numbers2)} LC, {len(po_numbers2)} PO, {len(usd_amounts2)} USD, {len(interunit_accounts2)} Interunit")
         
-        return {
+        # Cache the extracted data
+        self._cached_extracted_data = {
             'lc_numbers1': lc_numbers1_series,
             'po_numbers1': po_numbers1_series,
             'usd_amounts1': usd_amounts1_series,
@@ -962,6 +1243,8 @@ class   ExcelTransactionMatcher:
             'usd_amounts2': usd_amounts2_series,
             'interunit_accounts2': interunit_accounts2_series
         }
+        
+        return self._cached_extracted_data
 
     def process_files(self):
         """Process both files and prepare for matching with performance optimizations."""
@@ -994,9 +1277,9 @@ class   ExcelTransactionMatcher:
         # Let's check what's actually in the columns
         print(f"File 1 first row: {list(self.transactions1.iloc[0, :])}")
         
-        # Load workbooks once and extract all data in a single pass
-        print("Loading workbooks and extracting all data...")
-        extracted_data = self.load_workbooks_and_extract_data()
+        # Extract all data using cached workbooks and compiled regex
+        print("Extracting all data using optimized methods...")
+        extracted_data = self.load_workbooks_and_extract_data_optimized()
         
         # Extract LC numbers from both files
         lc_numbers1 = extracted_data['lc_numbers1']
@@ -1021,6 +1304,21 @@ class   ExcelTransactionMatcher:
         
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
+        
+        # Create optimized arrays for faster data access
+        self.create_optimized_arrays(
+            lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+            usd_amounts1, usd_amounts2, interunit_accounts1, interunit_accounts2
+        )
+        
+        # Selective precomputation based on file size
+        total_rows = len(self.transactions1) + len(self.transactions2)
+        if total_rows > 2000:  # Only precompute for large files
+            print("Large files detected - precomputing block data for maximum performance...")
+            self.precompute_all_block_data(self.transactions1)
+            self.precompute_all_block_data(self.transactions2)
+        else:
+            print("Small files detected - using on-demand caching for optimal performance...")
         
         return self.transactions1, self.transactions2, blocks1, blocks2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2
     
@@ -1048,13 +1346,8 @@ class   ExcelTransactionMatcher:
         print("STEP 2: LC MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration matching)
-        narration_matched_indices1 = set()
-        narration_matched_indices2 = set()
-        
-        for match in narration_matches:
-            narration_matched_indices1.add(match['File1_Index'])
-            narration_matched_indices2.add(match['File2_Index'])
+        # Create masks for unmatched records (after Narration matching) - OPTIMIZED
+        narration_matched_indices1, narration_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches)
         
         # Filter LC numbers to only unmatched records
         lc_numbers1_unmatched = lc_numbers1.copy()
@@ -1086,13 +1379,8 @@ class   ExcelTransactionMatcher:
         print("STEP 3: PO MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration and LC matching)
-        narration_lc_matched_indices1 = set()
-        narration_lc_matched_indices2 = set()
-        
-        for match in narration_matches + lc_matches:
-            narration_lc_matched_indices1.add(match['File1_Index'])
-            narration_lc_matched_indices2.add(match['File2_Index'])
+        # Create masks for unmatched records (after Narration and LC matching) - OPTIMIZED
+        narration_lc_matched_indices1, narration_lc_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches)
         
         # Filter PO numbers to only unmatched records
         po_numbers1_unmatched = po_numbers1.copy()
@@ -1124,13 +1412,8 @@ class   ExcelTransactionMatcher:
         print("STEP 4: INTERUNIT LOAN MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration, LC, and PO matching)
-        narration_lc_po_matched_indices1 = set()
-        narration_lc_po_matched_indices2 = set()
-        
-        for match in narration_matches + lc_matches + po_matches:
-            narration_lc_po_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_matched_indices2.add(match['File2_Index'])
+        # Create masks for unmatched records (after Narration, LC, and PO matching) - OPTIMIZED
+        narration_lc_po_matched_indices1, narration_lc_po_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches, po_matches)
         
         # Filter interunit accounts to only unmatched records
         interunit_accounts1_unmatched = interunit_accounts1.copy()
@@ -1162,13 +1445,8 @@ class   ExcelTransactionMatcher:
         print("STEP 5: USD MATCHING (ON UNMATCHED RECORDS)")
         print("="*60)
         
-        # Create masks for unmatched records (after Narration, LC, PO, and Interunit matching)
-        narration_lc_po_interunit_matched_indices1 = set()
-        narration_lc_po_interunit_matched_indices2 = set()
-        
-        for match in narration_matches + lc_matches + po_matches + interunit_matches:
-            narration_lc_po_interunit_matched_indices1.add(match['File1_Index'])
-            narration_lc_po_interunit_matched_indices2.add(match['File2_Index'])
+        # Create masks for unmatched records (after Narration, LC, PO, and Interunit matching) - OPTIMIZED
+        narration_lc_po_interunit_matched_indices1, narration_lc_po_interunit_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches, po_matches, interunit_matches)
         
         # Filter USD amounts to only unmatched records
         usd_amounts1_unmatched = usd_amounts1.copy()
@@ -1280,8 +1558,8 @@ class   ExcelTransactionMatcher:
         print(f"  - USD Matches: {len(usd_matches)}")
         print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)} (DISABLED)")
         
-        # Clean up cached workbooks to free memory
-        self.close_cached_workbooks()
+        # Clean up all caches to free memory
+        self.clear_all_caches()
         
         return all_matches
     
