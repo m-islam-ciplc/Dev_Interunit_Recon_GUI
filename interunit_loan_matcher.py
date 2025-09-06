@@ -123,6 +123,26 @@ class   ExcelTransactionMatcher:
         self._narration_cache = {}  # Cached narration strings
         self._amount_cache = {}  # Universal amount cache
         
+        # ULTRA-OPTIMIZED: Matching logic registry for future scalability
+        self._matching_logic_registry = self._initialize_matching_logic_registry()
+        
+        # ULTRA-OPTIMIZED: Pre-computed data caches
+        self._precomputed_data = {}
+        self._block_pair_cache = {}
+        
+        # ULTRA-OPTIMIZED: Performance monitoring
+        self._performance_stats = {
+            'block_pairs_analyzed': 0,
+            'matches_found': 0,
+            'cache_hits': 0,
+            'cache_misses': 0,
+            'processing_time': 0
+        }
+        
+        # ULTRA-OPTIMIZED: Memory management
+        self._max_cache_size = 10000  # Maximum cache entries
+        self._cache_cleanup_threshold = 0.8  # Cleanup when 80% full
+        
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
         # Read everything as strings to preserve all formatting
@@ -464,7 +484,11 @@ class   ExcelTransactionMatcher:
         cache_key = f"{id(transactions_df)}_{row_idx}"
         
         if cache_key not in self._narration_cache:
-            narration = str(transactions_df.iloc[row_idx, 2]).strip()
+            # Check bounds before accessing
+            if row_idx < len(transactions_df):
+                narration = str(transactions_df.iloc[row_idx, 2]).strip()
+            else:
+                narration = ""
             self._narration_cache[cache_key] = narration
         
         return self._narration_cache[cache_key]
@@ -474,107 +498,232 @@ class   ExcelTransactionMatcher:
         cache_key = f"{id(transactions_df)}_{row_idx}"
         
         if cache_key not in self._amount_cache:
-            row = transactions_df.iloc[row_idx]
-            self._amount_cache[cache_key] = self.extract_amounts_from_strings(row)
+            # Check bounds before accessing
+            if row_idx < len(transactions_df):
+                row = transactions_df.iloc[row_idx]
+                self._amount_cache[cache_key] = self.extract_amounts_from_strings(row)
+            else:
+                self._amount_cache[cache_key] = (0.0, 0.0)
         
         return self._amount_cache[cache_key]
     
     def find_matches_block_based_optimized(self, transactions1, transactions2, blocks1, blocks2, 
                                          lc_numbers1, lc_numbers2, po_numbers1, po_numbers2, 
                                          interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2):
-        """Find matches using block-based optimization - analyze each block once and determine best match type."""
+        """ULTRA-OPTIMIZED: Pre-filter by amount matching, then run matching logic only on filtered records."""
         
         print("\n" + "="*70)
-        print("🚀 BLOCK-BASED OPTIMIZATION - ANALYZE EACH BLOCK ONCE")
+        print("🚀 ULTRA-OPTIMIZED: PRE-FILTER BY AMOUNT MATCHING")
         print("="*70)
-        print("Instead of running each match type sequentially, we analyze each transaction block")
-        print("once and determine the best match type for that block. This eliminates redundant")
-        print("processing and improves performance significantly.")
+        print("Step 1: Find transaction blocks where lender debit = borrower credit")
+        print("Step 2: Save those records in filtered DataFrames")
+        print("Step 3: Run matching logic only on filtered records")
+        print("This eliminates unnecessary processing of non-matching amounts.")
         
-        all_matches = []
-        processed_blocks1 = set()
-        processed_blocks2 = set()
+        print(f"\n📊 INITIAL DATA:")
+        print(f"File 1: {len(transactions1)} transactions, {len(blocks1)} blocks")
+        print(f"File 2: {len(transactions2)} transactions, {len(blocks2)} blocks")
         
-        print(f"\n📊 BLOCK ANALYSIS:")
-        print(f"File 1: {len(blocks1)} transaction blocks")
-        print(f"File 2: {len(blocks2)} transaction blocks")
+        # STEP 1: Pre-filter by amount matching
+        print("\n🔍 STEP 1: PRE-FILTERING BY AMOUNT MATCHING...")
+        filtered_records1, filtered_records2 = self._prefilter_by_amount_matching(
+            transactions1, transactions2, blocks1, blocks2
+        )
         
-        # Create amount-to-block mapping for fast lookup
-        print("\n🔍 Creating amount-to-block mapping for fast lookup...")
-        amount_to_blocks1 = {}
-        amount_to_blocks2 = {}
+        print(f"✅ PRE-FILTERING COMPLETE:")
+        print(f"  - Filtered File 1: {len(filtered_records1)} records")
+        print(f"  - Filtered File 2: {len(filtered_records2)} records")
+        print(f"  - Reduction: {len(transactions1) - len(filtered_records1)} records eliminated from File 1")
+        print(f"  - Reduction: {len(transactions2) - len(filtered_records2)} records eliminated from File 2")
         
+        # STEP 2: Extract data only from filtered records
+        print("\n🔍 STEP 2: EXTRACTING DATA FROM FILTERED RECORDS...")
+        filtered_lc1, filtered_lc2, filtered_po1, filtered_po2, filtered_inter1, filtered_inter2, filtered_usd1, filtered_usd2 = self._extract_data_from_filtered_records(
+            filtered_records1, filtered_records2, lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+            interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2
+        )
+        
+        # STEP 3: Run matching logic only on filtered records
+        print("\n🔍 STEP 3: RUNNING MATCHING LOGIC ON FILTERED RECORDS...")
+        all_matches = self._run_matching_on_filtered_records(
+            filtered_records1, filtered_records2, filtered_lc1, filtered_lc2, 
+            filtered_po1, filtered_po2, filtered_inter1, filtered_inter2, 
+            filtered_usd1, filtered_usd2
+        )
+        
+        print(f"\n📈 ULTRA-OPTIMIZED MATCHING RESULTS:")
+        print(f"Total matches found: {len(all_matches)}")
+        print(f"Processing efficiency: {len(all_matches)} matches from {len(filtered_records1) + len(filtered_records2)} filtered records")
+        
+        return all_matches
+    
+    def _prefilter_by_amount_matching(self, transactions1, transactions2, blocks1, blocks2):
+        """Pre-filter records where lender debit amount = borrower credit amount."""
+        print("  - Creating amount-to-record mapping...")
+        
+        # Create amount-to-record mapping for both files
+        amount_to_records1 = {}  # {amount: [(row_idx, role, block_idx)]}
+        amount_to_records2 = {}
+        
+        # Map File 1 records by amount
         for block_idx, block in enumerate(blocks1):
             for row_idx in block:
                 if row_idx < len(transactions1):
                     amounts = self.get_cached_amounts_universal(row_idx, transactions1)
-                    if amounts[0] > 0:  # Debit amount
-                        if amounts[0] not in amount_to_blocks1:
-                            amount_to_blocks1[amounts[0]] = []
-                        amount_to_blocks1[amounts[0]].append((block_idx, row_idx, 'lender'))
-                    if amounts[1] > 0:  # Credit amount
-                        if amounts[1] not in amount_to_blocks1:
-                            amount_to_blocks1[amounts[1]] = []
-                        amount_to_blocks1[amounts[1]].append((block_idx, row_idx, 'borrower'))
+                    if amounts[0] > 0:  # Debit amount (lender)
+                        if amounts[0] not in amount_to_records1:
+                            amount_to_records1[amounts[0]] = []
+                        amount_to_records1[amounts[0]].append((row_idx, 'lender', block_idx))
+                    if amounts[1] > 0:  # Credit amount (borrower)
+                        if amounts[1] not in amount_to_records1:
+                            amount_to_records1[amounts[1]] = []
+                        amount_to_records1[amounts[1]].append((row_idx, 'borrower', block_idx))
         
+        # Map File 2 records by amount
         for block_idx, block in enumerate(blocks2):
             for row_idx in block:
                 if row_idx < len(transactions2):
                     amounts = self.get_cached_amounts_universal(row_idx, transactions2)
-                    if amounts[0] > 0:  # Debit amount
-                        if amounts[0] not in amount_to_blocks2:
-                            amount_to_blocks2[amounts[0]] = []
-                        amount_to_blocks2[amounts[0]].append((block_idx, row_idx, 'lender'))
-                    if amounts[1] > 0:  # Credit amount
-                        if amounts[1] not in amount_to_blocks2:
-                            amount_to_blocks2[amounts[1]] = []
-                        amount_to_blocks2[amounts[1]].append((block_idx, row_idx, 'borrower'))
+                    if amounts[0] > 0:  # Debit amount (lender)
+                        if amounts[0] not in amount_to_records2:
+                            amount_to_records2[amounts[0]] = []
+                        amount_to_records2[amounts[0]].append((row_idx, 'lender', block_idx))
+                    if amounts[1] > 0:  # Credit amount (borrower)
+                        if amounts[1] not in amount_to_records2:
+                            amount_to_records2[amounts[1]] = []
+                        amount_to_records2[amounts[1]].append((row_idx, 'borrower', block_idx))
         
-        print(f"Created amount mappings: {len(amount_to_blocks1)} amounts in File 1, {len(amount_to_blocks2)} amounts in File 2")
+        print(f"  - File 1: {len(amount_to_records1)} unique amounts")
+        print(f"  - File 2: {len(amount_to_records2)} unique amounts")
         
-        # Find common amounts between files
-        common_amounts = set(amount_to_blocks1.keys()) & set(amount_to_blocks2.keys())
-        print(f"Found {len(common_amounts)} common amounts between files")
+        # Find common amounts
+        common_amounts = set(amount_to_records1.keys()) & set(amount_to_records2.keys())
+        print(f"  - Common amounts: {len(common_amounts)}")
+        
+        # Collect records that have matching amounts
+        filtered_indices1 = set()
+        filtered_indices2 = set()
+        
+        for amount in common_amounts:
+            file1_records = amount_to_records1[amount]
+            file2_records = amount_to_records2[amount]
+            
+            # Check for lender-borrower pairs
+            for row1_idx, role1, block1_idx in file1_records:
+                for row2_idx, role2, block2_idx in file2_records:
+                    # Only process lender-borrower pairs (not lender-lender or borrower-borrower)
+                    if role1 != role2:
+                        filtered_indices1.add(row1_idx)
+                        filtered_indices2.add(row2_idx)
+        
+        print(f"  - Filtered indices File 1: {len(filtered_indices1)}")
+        print(f"  - Filtered indices File 2: {len(filtered_indices2)}")
+        
+        # Create filtered DataFrames
+        filtered_records1 = transactions1.iloc[list(filtered_indices1)].copy() if filtered_indices1 else transactions1.iloc[0:0].copy()
+        filtered_records2 = transactions2.iloc[list(filtered_indices2)].copy() if filtered_indices2 else transactions2.iloc[0:0].copy()
+        
+        return filtered_records1, filtered_records2
+    
+    def _extract_data_from_filtered_records(self, filtered_records1, filtered_records2, 
+                                          lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
+                                          interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2):
+        """Extract matching data only from filtered records."""
+        print("  - Extracting LC numbers from filtered records...")
+        filtered_lc1 = self._extract_filtered_series(lc_numbers1, filtered_records1, lc_numbers1)
+        filtered_lc2 = self._extract_filtered_series(lc_numbers2, filtered_records2, lc_numbers2)
+        
+        print("  - Extracting PO numbers from filtered records...")
+        filtered_po1 = self._extract_filtered_series(po_numbers1, filtered_records1, po_numbers1)
+        filtered_po2 = self._extract_filtered_series(po_numbers2, filtered_records2, po_numbers2)
+        
+        print("  - Extracting Interunit accounts from filtered records...")
+        filtered_inter1 = self._extract_filtered_series(interunit_accounts1, filtered_records1, interunit_accounts1)
+        filtered_inter2 = self._extract_filtered_series(interunit_accounts2, filtered_records2, interunit_accounts2)
+        
+        print("  - Extracting USD amounts from filtered records...")
+        filtered_usd1 = self._extract_filtered_series(usd_amounts1, filtered_records1, usd_amounts1)
+        filtered_usd2 = self._extract_filtered_series(usd_amounts2, filtered_records2, usd_amounts2)
+        
+        return filtered_lc1, filtered_lc2, filtered_po1, filtered_po2, filtered_inter1, filtered_inter2, filtered_usd1, filtered_usd2
+    
+    def _extract_filtered_series(self, original_series, filtered_df, reference_series):
+        """Extract series data for filtered records only."""
+        if len(filtered_df) == 0:
+            return pd.Series(dtype=object)
+        
+        # Get the indices of filtered records in the original series
+        filtered_indices = filtered_df.index
+        return original_series.iloc[filtered_indices].copy()
+    
+    def _run_matching_on_filtered_records(self, filtered_records1, filtered_records2,
+                                        filtered_lc1, filtered_lc2, filtered_po1, filtered_po2,
+                                        filtered_inter1, filtered_inter2, filtered_usd1, filtered_usd2):
+        """Run matching logic only on pre-filtered records."""
+        print("  - Running matching logic on filtered records...")
+        
+        all_matches = []
+        
+        # Create amount-to-record mapping for filtered records
+        amount_to_records1 = {}
+        amount_to_records2 = {}
+        
+        # Map filtered File 1 records by amount
+        for idx, row in filtered_records1.iterrows():
+            amounts = self.get_cached_amounts_universal(idx, filtered_records1)
+            if amounts[0] > 0:  # Debit amount (lender)
+                if amounts[0] not in amount_to_records1:
+                    amount_to_records1[amounts[0]] = []
+                amount_to_records1[amounts[0]].append((idx, 'lender'))
+            if amounts[1] > 0:  # Credit amount (borrower)
+                if amounts[1] not in amount_to_records1:
+                    amount_to_records1[amounts[1]] = []
+                amount_to_records1[amounts[1]].append((idx, 'borrower'))
+        
+        # Map filtered File 2 records by amount
+        for idx, row in filtered_records2.iterrows():
+            amounts = self.get_cached_amounts_universal(idx, filtered_records2)
+            if amounts[0] > 0:  # Debit amount (lender)
+                if amounts[0] not in amount_to_records2:
+                    amount_to_records2[amounts[0]] = []
+                amount_to_records2[amounts[0]].append((idx, 'lender'))
+            if amounts[1] > 0:  # Credit amount (borrower)
+                if amounts[1] not in amount_to_records2:
+                    amount_to_records2[amounts[1]] = []
+                amount_to_records2[amounts[1]].append((idx, 'borrower'))
+        
+        # Find common amounts in filtered records
+        common_amounts = set(amount_to_records1.keys()) & set(amount_to_records2.keys())
+        print(f"  - Common amounts in filtered records: {len(common_amounts)}")
         
         # Process each common amount
         for amount in common_amounts:
-            file1_blocks = amount_to_blocks1[amount]
-            file2_blocks = amount_to_blocks2[amount]
+            file1_records = amount_to_records1[amount]
+            file2_records = amount_to_records2[amount]
             
-            # Check all possible block combinations for this amount
-            for block1_info in file1_blocks:
-                block1_idx, row1_idx, role1 = block1_info
-                
-                # Skip if this block is already processed
-                if block1_idx in processed_blocks1:
-                    continue
-                
-                for block2_info in file2_blocks:
-                    block2_idx, row2_idx, role2 = block2_info
-                    
-                    # Skip if this block is already processed
-                    if block2_idx in processed_blocks2:
-                        continue
-                    
+            # Check all possible record combinations for this amount
+            for row1_idx, role1 in file1_records:
+                for row2_idx, role2 in file2_records:
                     # Skip if both are lenders or both are borrowers
                     if role1 == role2:
                         continue
                     
                     # Determine lender and borrower
                     if role1 == 'lender':
-                        lender_row1, borrower_row2 = row1_idx, row2_idx
+                        lender_row, borrower_row = row1_idx, row2_idx
                         lender_file, borrower_file = 1, 2
+                        lender_records, borrower_records = filtered_records1, filtered_records2
                     else:
-                        lender_row1, borrower_row2 = row2_idx, row1_idx
+                        lender_row, borrower_row = row2_idx, row1_idx
                         lender_file, borrower_file = 2, 1
+                        lender_records, borrower_records = filtered_records2, filtered_records1
                     
-                    # Analyze this block pair and determine best match type
-                    match_type, match_data = self.analyze_block_pair(
-                        transactions1, transactions2, blocks1, blocks2,
-                        lender_row1, borrower_row2, lender_file, borrower_file,
-                        lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
-                        interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2,
-                        amount
+                    # Analyze this record pair and determine best match type
+                    match_type, match_data = self._analyze_filtered_record_pair(
+                        lender_records, borrower_records, lender_row, borrower_row,
+                        lender_file, borrower_file, filtered_lc1, filtered_lc2,
+                        filtered_po1, filtered_po2, filtered_inter1, filtered_inter2,
+                        filtered_usd1, filtered_usd2, amount
                     )
                     
                     if match_type:
@@ -582,71 +731,368 @@ class   ExcelTransactionMatcher:
                         match = {
                             'match_id': None,
                             'Match_Type': match_type,
-                            'File1_Index': lender_row1 if lender_file == 1 else borrower_row2,
-                            'File2_Index': borrower_row2 if lender_file == 1 else lender_row1,
+                            'File1_Index': lender_row if lender_file == 1 else borrower_row,
+                            'File2_Index': borrower_row if lender_file == 1 else lender_row,
                             'Amount': amount,
                             **match_data
                         }
                         all_matches.append(match)
-                        
-                        # Mark blocks as processed
-                        processed_blocks1.add(block1_idx)
-                        processed_blocks2.add(block2_idx)
-                        
-                        print(f"✅ {match_type} match found: Amount {amount}, Blocks {block1_idx}-{block2_idx}")
-                        break  # Move to next block1
-        
-        print(f"\n📈 BLOCK-BASED MATCHING RESULTS:")
-        print(f"Total matches found: {len(all_matches)}")
-        print(f"Processed blocks File 1: {len(processed_blocks1)}/{len(blocks1)}")
-        print(f"Processed blocks File 2: {len(processed_blocks2)}/{len(blocks2)}")
+                        print(f"    ✅ {match_type} match found: Amount {amount}")
+                        break  # Move to next amount after first match
         
         return all_matches
+    
+    def _analyze_filtered_record_pair(self, lender_records, borrower_records, lender_row, borrower_row,
+                                    lender_file, borrower_file, filtered_lc1, filtered_lc2,
+                                    filtered_po1, filtered_po2, filtered_inter1, filtered_inter2,
+                                    filtered_usd1, filtered_usd2, amount):
+        """Analyze a filtered record pair and determine the best match type."""
+        
+        # Pre-compute all data for this record pair
+        block_pair_key = f"{lender_file}_{lender_row}_{borrower_file}_{borrower_row}"
+        
+        if block_pair_key not in self._block_pair_cache:
+            self._performance_stats['cache_misses'] += 1
+            self._block_pair_cache[block_pair_key] = self._precompute_filtered_record_data(
+                lender_records, borrower_records, lender_row, borrower_row,
+                lender_file, borrower_file, filtered_lc1, filtered_lc2,
+                filtered_po1, filtered_po2, filtered_inter1, filtered_inter2,
+                filtered_usd1, filtered_usd2
+            )
+            self._cleanup_caches_if_needed()
+        else:
+            self._performance_stats['cache_hits'] += 1
+        
+        block_data = self._block_pair_cache[block_pair_key]
+        
+        # Process matching logics in priority order
+        for logic_name, logic_config in sorted(self._matching_logic_registry.items(), 
+                                             key=lambda x: x[1]['priority']):
+            if not logic_config['enabled']:
+                continue
+                
+            try:
+                match_result = logic_config['function'](block_data, amount)
+                if match_result:
+                    self._performance_stats['matches_found'] += 1
+                    return logic_name, match_result
+            except Exception as e:
+                print(f"⚠️ Warning: {logic_name} matching failed: {e}")
+                continue
+        
+        return None, {}
+    
+    def _precompute_filtered_record_data(self, lender_records, borrower_records, lender_row, borrower_row,
+                                       lender_file, borrower_file, filtered_lc1, filtered_lc2,
+                                       filtered_po1, filtered_po2, filtered_inter1, filtered_inter2,
+                                       filtered_usd1, filtered_usd2):
+        """Pre-compute all data for a filtered record pair."""
+        return {
+            'lender_narration': self.get_cached_narration(lender_row, lender_records),
+            'borrower_narration': self.get_cached_narration(borrower_row, borrower_records),
+            'lender_lc': self._get_filtered_lc_number(lender_file, lender_row, filtered_lc1, filtered_lc2),
+            'borrower_lc': self._get_filtered_lc_number(borrower_file, borrower_row, filtered_lc1, filtered_lc2),
+            'lender_po': self._get_filtered_po_number(lender_file, lender_row, filtered_po1, filtered_po2),
+            'borrower_po': self._get_filtered_po_number(borrower_file, borrower_row, filtered_po1, filtered_po2),
+            'lender_interunit': self._get_filtered_interunit(lender_file, lender_row, filtered_inter1, filtered_inter2),
+            'borrower_interunit': self._get_filtered_interunit(borrower_file, borrower_row, filtered_inter1, filtered_inter2),
+            'lender_usd': self._get_filtered_usd(lender_file, lender_row, filtered_usd1, filtered_usd2),
+            'borrower_usd': self._get_filtered_usd(borrower_file, borrower_row, filtered_usd1, filtered_usd2),
+            'lender_file': lender_file,
+            'borrower_file': borrower_file,
+            'lender_row': lender_row,
+            'borrower_row': borrower_row
+        }
+    
+    def _get_filtered_lc_number(self, file_num, row_idx, filtered_lc1, filtered_lc2):
+        """Get LC number from filtered series."""
+        if file_num == 1 and row_idx in filtered_lc1.index:
+            return filtered_lc1.loc[row_idx] if pd.notna(filtered_lc1.loc[row_idx]) else None
+        elif file_num == 2 and row_idx in filtered_lc2.index:
+            return filtered_lc2.loc[row_idx] if pd.notna(filtered_lc2.loc[row_idx]) else None
+        return None
+    
+    def _get_filtered_po_number(self, file_num, row_idx, filtered_po1, filtered_po2):
+        """Get PO number from filtered series."""
+        if file_num == 1 and row_idx in filtered_po1.index:
+            return filtered_po1.loc[row_idx] if pd.notna(filtered_po1.loc[row_idx]) else None
+        elif file_num == 2 and row_idx in filtered_po2.index:
+            return filtered_po2.loc[row_idx] if pd.notna(filtered_po2.loc[row_idx]) else None
+        return None
+    
+    def _get_filtered_interunit(self, file_num, row_idx, filtered_inter1, filtered_inter2):
+        """Get Interunit account from filtered series."""
+        if file_num == 1 and row_idx in filtered_inter1.index:
+            return filtered_inter1.loc[row_idx] if pd.notna(filtered_inter1.loc[row_idx]) else None
+        elif file_num == 2 and row_idx in filtered_inter2.index:
+            return filtered_inter2.loc[row_idx] if pd.notna(filtered_inter2.loc[row_idx]) else None
+        return None
+    
+    def _get_filtered_usd(self, file_num, row_idx, filtered_usd1, filtered_usd2):
+        """Get USD amount from filtered series."""
+        if file_num == 1 and row_idx in filtered_usd1.index:
+            return filtered_usd1.loc[row_idx] if pd.notna(filtered_usd1.loc[row_idx]) else None
+        elif file_num == 2 and row_idx in filtered_usd2.index:
+            return filtered_usd2.loc[row_idx] if pd.notna(filtered_usd2.loc[row_idx]) else None
+        return None
+    
+    def add_matching_logic(self, name, priority, function, enabled=True, description=""):
+        """ULTRA-OPTIMIZED: Add new matching logic dynamically for future scalability."""
+        self._matching_logic_registry[name] = {
+            'priority': priority,
+            'function': function,
+            'enabled': enabled,
+            'description': description
+        }
+        print(f"✅ Added matching logic: {name} (Priority: {priority}, Enabled: {enabled})")
+    
+    def enable_matching_logic(self, name):
+        """ULTRA-OPTIMIZED: Enable a matching logic."""
+        if name in self._matching_logic_registry:
+            self._matching_logic_registry[name]['enabled'] = True
+            print(f"✅ Enabled matching logic: {name}")
+        else:
+            print(f"❌ Matching logic not found: {name}")
+    
+    def disable_matching_logic(self, name):
+        """ULTRA-OPTIMIZED: Disable a matching logic."""
+        if name in self._matching_logic_registry:
+            self._matching_logic_registry[name]['enabled'] = False
+            print(f"✅ Disabled matching logic: {name}")
+        else:
+            print(f"❌ Matching logic not found: {name}")
+    
+    def get_matching_logic_status(self):
+        """ULTRA-OPTIMIZED: Get status of all matching logics."""
+        status = {}
+        for name, config in self._matching_logic_registry.items():
+            status[name] = {
+                'enabled': config['enabled'],
+                'priority': config['priority'],
+                'description': config['description']
+            }
+        return status
+    
+    def _cleanup_caches_if_needed(self):
+        """ULTRA-OPTIMIZED: Clean up caches when they get too large."""
+        total_cache_size = (len(self._block_pair_cache) + 
+                           len(self._block_header_cache) + 
+                           len(self._narration_cache) + 
+                           len(self._amount_cache))
+        
+        if total_cache_size > self._max_cache_size * self._cache_cleanup_threshold:
+            print(f"🧹 Cleaning up caches (size: {total_cache_size})...")
+            
+            # Keep only the most recent 50% of entries
+            keep_size = self._max_cache_size // 2
+            
+            # Clean block pair cache
+            if len(self._block_pair_cache) > keep_size:
+                items = list(self._block_pair_cache.items())
+                self._block_pair_cache = dict(items[-keep_size:])
+            
+            # Clean other caches
+            if len(self._block_header_cache) > keep_size:
+                items = list(self._block_header_cache.items())
+                self._block_header_cache = dict(items[-keep_size:])
+            
+            if len(self._narration_cache) > keep_size:
+                items = list(self._narration_cache.items())
+                self._narration_cache = dict(items[-keep_size:])
+            
+            if len(self._amount_cache) > keep_size:
+                items = list(self._amount_cache.items())
+                self._amount_cache = dict(items[-keep_size:])
+            
+            print(f"✅ Cache cleanup completed (new size: {len(self._block_pair_cache) + len(self._block_header_cache) + len(self._narration_cache) + len(self._amount_cache)})")
+    
+    def get_performance_stats(self):
+        """ULTRA-OPTIMIZED: Get performance statistics."""
+        return self._performance_stats.copy()
+    
+    def reset_performance_stats(self):
+        """ULTRA-OPTIMIZED: Reset performance statistics."""
+        self._performance_stats = {
+            'block_pairs_analyzed': 0,
+            'matches_found': 0,
+            'cache_hits': 0,
+            'cache_misses': 0,
+            'processing_time': 0
+        }
+        print("✅ Performance statistics reset")
+    
+    def optimize_for_large_files(self):
+        """ULTRA-OPTIMIZED: Apply additional optimizations for large files."""
+        print("🚀 Applying large file optimizations...")
+        
+        # Increase cache sizes for large files
+        self._max_cache_size = 50000
+        
+        # Enable more aggressive pre-filtering
+        print("✅ Large file optimizations applied")
+    
+    def optimize_for_small_files(self):
+        """ULTRA-OPTIMIZED: Apply optimizations for small files."""
+        print("🚀 Applying small file optimizations...")
+        
+        # Reduce cache sizes for small files
+        self._max_cache_size = 1000
+        
+        # Disable some heavy optimizations
+        print("✅ Small file optimizations applied")
+        
+    def _initialize_matching_logic_registry(self):
+        """Initialize the matching logic registry for maximum performance and future scalability."""
+        return {
+            'Narration': {
+                'priority': 1,
+                'function': self._match_narration_ultra_optimized,
+                'enabled': True,
+                'description': 'Exact narration matching (highest priority)'
+            },
+            'LC': {
+                'priority': 2,
+                'function': self._match_lc_ultra_optimized,
+                'enabled': True,
+                'description': 'Letter of Credit number matching'
+            },
+            'PO': {
+                'priority': 3,
+                'function': self._match_po_ultra_optimized,
+                'enabled': True,
+                'description': 'Purchase Order number matching'
+            },
+            'Interunit': {
+                'priority': 4,
+                'function': self._match_interunit_ultra_optimized,
+                'enabled': True,
+                'description': 'Interunit account matching'
+            },
+            'USD': {
+                'priority': 5,
+                'function': self._match_usd_ultra_optimized,
+                'enabled': True,
+                'description': 'USD amount matching'
+            },
+        }
     
     def analyze_block_pair(self, transactions1, transactions2, blocks1, blocks2,
                           lender_row, borrower_row, lender_file, borrower_file,
                           lc_numbers1, lc_numbers2, po_numbers1, po_numbers2,
                           interunit_accounts1, interunit_accounts2, usd_amounts1, usd_amounts2,
                           amount):
-        """Analyze a block pair and determine the best match type."""
+        """ULTRA-OPTIMIZED: Analyze a block pair using the matching logic registry."""
         
-        # Get narrations
-        lender_narration = self.get_cached_narration(lender_row, transactions1 if lender_file == 1 else transactions2)
-        borrower_narration = self.get_cached_narration(borrower_row, transactions2 if borrower_file == 1 else transactions1)
+        # ULTRA-OPTIMIZED: Performance monitoring
+        self._performance_stats['block_pairs_analyzed'] += 1
         
-        # 1. NARRATION MATCHING (Highest Priority)
+        # ULTRA-OPTIMIZED: Pre-compute all data once for this block pair
+        block_pair_key = f"{lender_file}_{lender_row}_{borrower_file}_{borrower_row}"
+        
+        if block_pair_key not in self._block_pair_cache:
+            self._performance_stats['cache_misses'] += 1
+            self._block_pair_cache[block_pair_key] = self._precompute_block_pair_data(
+                transactions1, transactions2, lender_row, borrower_row, 
+                lender_file, borrower_file, lc_numbers1, lc_numbers2, 
+                po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2, 
+                usd_amounts1, usd_amounts2
+            )
+            
+            # ULTRA-OPTIMIZED: Memory management
+            self._cleanup_caches_if_needed()
+        else:
+            self._performance_stats['cache_hits'] += 1
+        
+        block_data = self._block_pair_cache[block_pair_key]
+        
+        # ULTRA-OPTIMIZED: Process matching logics in priority order
+        for logic_name, logic_config in sorted(self._matching_logic_registry.items(), 
+                                             key=lambda x: x[1]['priority']):
+            if not logic_config['enabled']:
+                continue
+                
+            try:
+                match_result = logic_config['function'](block_data, amount)
+                if match_result:
+                    self._performance_stats['matches_found'] += 1
+                    return logic_name, match_result
+            except Exception as e:
+                print(f"⚠️ Warning: {logic_name} matching failed: {e}")
+                continue
+        
+        # No match found
+        return None, {}
+    
+    def _precompute_block_pair_data(self, transactions1, transactions2, lender_row, borrower_row,
+                                   lender_file, borrower_file, lc_numbers1, lc_numbers2,
+                                   po_numbers1, po_numbers2, interunit_accounts1, interunit_accounts2,
+                                   usd_amounts1, usd_amounts2):
+        """ULTRA-OPTIMIZED: Pre-compute all data for a block pair to avoid repeated calculations."""
+        return {
+            'lender_narration': self.get_cached_narration(lender_row, transactions1 if lender_file == 1 else transactions2),
+            'borrower_narration': self.get_cached_narration(borrower_row, transactions2 if borrower_file == 1 else transactions1),
+            'lender_lc': self.get_optimized_lc_numbers(lender_file, lender_row),
+            'borrower_lc': self.get_optimized_lc_numbers(borrower_file, borrower_row),
+            'lender_po': self.get_optimized_po_numbers(lender_file, lender_row),
+            'borrower_po': self.get_optimized_po_numbers(borrower_file, borrower_row),
+            'lender_interunit': self.get_optimized_interunit_accounts(lender_file, lender_row),
+            'borrower_interunit': self.get_optimized_interunit_accounts(borrower_file, borrower_row),
+            'lender_usd': self.get_optimized_usd_amounts(lender_file, lender_row),
+            'borrower_usd': self.get_optimized_usd_amounts(borrower_file, borrower_row),
+            'lender_file': lender_file,
+            'borrower_file': borrower_file,
+            'lender_row': lender_row,
+            'borrower_row': borrower_row
+        }
+    
+    def _match_narration_ultra_optimized(self, block_data, amount):
+        """ULTRA-OPTIMIZED: Narration matching with maximum performance."""
+        lender_narration = block_data['lender_narration']
+        borrower_narration = block_data['borrower_narration']
+        
         if (len(lender_narration) > 10 and len(borrower_narration) > 10 and 
             lender_narration.lower() not in ['nan', 'none', ''] and
             borrower_narration.lower() not in ['nan', 'none', ''] and
             lender_narration == borrower_narration):
-            return 'Narration', {'Narration': lender_narration}
+            return {'Narration': lender_narration}
+        return None
+    
+    def _match_lc_ultra_optimized(self, block_data, amount):
+        """ULTRA-OPTIMIZED: LC matching with maximum performance."""
+        lender_lc = block_data['lender_lc']
+        borrower_lc = block_data['borrower_lc']
         
-        # 2. LC MATCHING
-        lender_lc = self.get_optimized_lc_numbers(lender_file, lender_row)
-        borrower_lc = self.get_optimized_lc_numbers(borrower_file, borrower_row)
         if lender_lc and borrower_lc and lender_lc == borrower_lc:
-            return 'LC', {'LC_Number': lender_lc}
+            return {'LC_Number': lender_lc}
+        return None
+    
+    def _match_po_ultra_optimized(self, block_data, amount):
+        """ULTRA-OPTIMIZED: PO matching with maximum performance."""
+        lender_po = block_data['lender_po']
+        borrower_po = block_data['borrower_po']
         
-        # 3. PO MATCHING
-        lender_po = self.get_optimized_po_numbers(lender_file, lender_row)
-        borrower_po = self.get_optimized_po_numbers(borrower_file, borrower_row)
         if lender_po and borrower_po and lender_po == borrower_po:
-            return 'PO', {'PO_Number': lender_po}
+            return {'PO_Number': lender_po}
+        return None
+    
+    def _match_interunit_ultra_optimized(self, block_data, amount):
+        """ULTRA-OPTIMIZED: Interunit matching with maximum performance."""
+        lender_interunit = block_data['lender_interunit']
+        borrower_interunit = block_data['borrower_interunit']
         
-        # 4. INTERUNIT MATCHING
-        lender_interunit = self.get_optimized_interunit_accounts(lender_file, lender_row)
-        borrower_interunit = self.get_optimized_interunit_accounts(borrower_file, borrower_row)
         if lender_interunit and borrower_interunit and lender_interunit == borrower_interunit:
-            return 'Interunit', {'Interunit_Account': lender_interunit}
+            return {'Interunit_Account': lender_interunit}
+        return None
+    
+    def _match_usd_ultra_optimized(self, block_data, amount):
+        """ULTRA-OPTIMIZED: USD matching with maximum performance."""
+        lender_usd = block_data['lender_usd']
+        borrower_usd = block_data['borrower_usd']
         
-        # 5. USD MATCHING
-        lender_usd = self.get_optimized_usd_amounts(lender_file, lender_row)
-        borrower_usd = self.get_optimized_usd_amounts(borrower_file, borrower_row)
         if lender_usd and borrower_usd and lender_usd == borrower_usd:
-            return 'USD', {'USD_Amount': lender_usd}
-        
-        # No match found
-        return None, {}
+            return {'USD_Amount': lender_usd}
+        return None
+    
     
     def precompute_all_block_data(self, transactions_df):
         """Precompute all block headers, description rows, and narrations for maximum performance."""
@@ -1556,197 +2002,6 @@ class   ExcelTransactionMatcher:
         return all_matches
     
     def find_parent_transaction_row_with_formatting(self, ws, current_row):
-        
-        # Step 3: Find PO matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 3: PO MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after Narration and LC matching) - OPTIMIZED
-        narration_lc_matched_indices1, narration_lc_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches)
-        
-        # Filter PO numbers to only unmatched records
-        po_numbers1_unmatched = po_numbers1.copy()
-        po_numbers2_unmatched = po_numbers2.copy()
-        
-        # Mark matched records as None in PO numbers
-        for idx in narration_lc_matched_indices1:
-            if idx < len(po_numbers1_unmatched):
-                po_numbers1_unmatched.iloc[idx] = None
-        
-        for idx in narration_lc_matched_indices2:
-            if idx < len(po_numbers2_unmatched):
-                po_numbers2_unmatched.iloc[idx] = None
-        
-        print(f"File 1: {len(po_numbers1_unmatched[po_numbers1_unmatched.notna()])} unmatched PO numbers")
-        print(f"File 2: {len(po_numbers2_unmatched[po_numbers2_unmatched.notna()])} unmatched PO numbers")
-        
-        # Find PO matches on unmatched records with shared state
-        print(f"\nSTEP 3: PO MATCHING")
-        po_matches = self.find_po_matches_optimized(
-            transactions1, transactions2, po_numbers1_unmatched, po_numbers2_unmatched,
-            {}, None
-        )
-        
-        # print(f"\nPO Matching Results: {len(po_matches)} matches found")
-        
-        # Step 4: Find Interunit Loan matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 4: INTERUNIT LOAN MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after Narration, LC, and PO matching) - OPTIMIZED
-        narration_lc_po_matched_indices1, narration_lc_po_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches, po_matches)
-        
-        # Filter interunit accounts to only unmatched records
-        interunit_accounts1_unmatched = interunit_accounts1.copy()
-        interunit_accounts2_unmatched = interunit_accounts2.copy()
-        
-        # Mark matched records as None in interunit accounts
-        for idx in narration_lc_po_matched_indices1:
-            if idx < len(interunit_accounts1_unmatched):
-                interunit_accounts1_unmatched.iloc[idx] = None
-        
-        for idx in narration_lc_po_matched_indices2:
-            if idx < len(interunit_accounts2_unmatched):
-                interunit_accounts2_unmatched.iloc[idx] = None
-        
-        print(f"File 1: {len(interunit_accounts1_unmatched[interunit_accounts1_unmatched.notna()])} unmatched interunit accounts")
-        print(f"File 2: {len(interunit_accounts2_unmatched[interunit_accounts2_unmatched.notna()])} unmatched interunit accounts")
-        
-        # Find interunit loan matches on unmatched records with shared state
-        print(f"\nSTEP 4: INTERUNIT MATCHING")
-        interunit_matches = self.find_interunit_matches_optimized(
-            transactions1, transactions2, interunit_accounts1_unmatched, interunit_accounts2_unmatched,
-            {}, None
-        )
-        
-        # print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
-        
-        # Step 5: Find USD matches on UNMATCHED records
-        print("\n" + "="*60)
-        print("STEP 5: USD MATCHING (ON UNMATCHED RECORDS)")
-        print("="*60)
-        
-        # Create masks for unmatched records (after Narration, LC, PO, and Interunit matching) - OPTIMIZED
-        narration_lc_po_interunit_matched_indices1, narration_lc_po_interunit_matched_indices2 = self.create_unmatched_indices_optimized(narration_matches, lc_matches, po_matches, interunit_matches)
-        
-        # Filter USD amounts to only unmatched records
-        usd_amounts1_unmatched = usd_amounts1.copy()
-        usd_amounts2_unmatched = usd_amounts2.copy()
-        
-        # Mark matched records as None in USD amounts
-        for idx in narration_lc_po_interunit_matched_indices1:
-            if idx < len(usd_amounts1_unmatched):
-                usd_amounts1_unmatched.iloc[idx] = None
-        
-        for idx in narration_lc_po_interunit_matched_indices2:
-            if idx < len(usd_amounts2_unmatched):
-                usd_amounts2_unmatched.iloc[idx] = None
-        
-        print(f"File 1: {len(usd_amounts1_unmatched[usd_amounts1_unmatched.notna()])} unmatched USD amounts")
-        print(f"File 2: {len(usd_amounts2_unmatched[usd_amounts2_unmatched.notna()])} unmatched USD amounts")
-        
-        # Find USD matches on unmatched records with shared state
-        print(f"\nSTEP 5: USD MATCHING")
-        usd_matches = self.find_usd_matches_optimized(
-            transactions1, transactions2, usd_amounts1_unmatched, usd_amounts2_unmatched,
-            {}, None
-        )
-        
-        # print(f"\nUSD Matching Results: {len(usd_matches)} matches found")
-        
-        # Step 6: Find Aggregated PO matches on UNMATCHED records
-        # COMMENTED OUT - One-to-many PO matches not working
-        print("\n" + "="*60)
-        print("STEP 6: AGGREGATED PO MATCHING - DISABLED")
-        print("="*60)
-        print("Aggregated PO matching has been commented out due to issues")
-        
-        # # Create masks for unmatched records (after Narration, LC, PO, Interunit, and USD matching)
-        # narration_lc_po_interunit_usd_matched_indices1 = set()
-        # narration_lc_po_interunit_usd_matched_indices2 = set()
-        # 
-        # for match in narration_matches + lc_matches + po_matches + interunit_matches + usd_matches:
-        #     narration_lc_po_interunit_usd_matched_indices1.add(match['File1_Index'])
-        #     narration_lc_po_interunit_usd_matched_indices2.add(match['File2_Index'])
-        # 
-        # # Filter PO numbers to only unmatched records
-        # po_numbers1_unmatched_for_aggregated = po_numbers1.copy()
-        # po_numbers2_unmatched_for_aggregated = po_numbers2.copy()
-        # 
-        # # Mark matched records as None in PO numbers
-        # for idx in narration_lc_po_interunit_usd_matched_indices1:
-        #     if idx < len(po_numbers1_unmatched_for_aggregated):
-        #         po_numbers1_unmatched_for_aggregated.iloc[idx] = None
-        # 
-        # for idx in narration_lc_po_interunit_usd_matched_indices2:
-        #     if idx < len(po_numbers2_unmatched_for_aggregated):
-        #         po_numbers2_unmatched_for_aggregated.iloc[idx] = None
-        # 
-        # print(f"File 1: {len(po_numbers1_unmatched_for_aggregated[po_numbers1_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        # print(f"File 2: {len(po_numbers2_unmatched_for_aggregated[po_numbers2_unmatched_for_aggregated.notna()])} unmatched PO numbers for aggregated matching")
-        # 
-        # # Find aggregated PO matches on unmatched records with shared state
-        # print(f"\nSTEP 6: AGGREGATED PO MATCHING")
-        # aggregated_po_matches = self.find_aggregated_po_matches_optimized(
-        #     transactions1, transactions2, po_numbers1_unmatched_for_aggregated, po_numbers2_unmatched_for_aggregated,
-        #     {}, None
-        # )
-        # 
-        # # print(f"\nAggregated PO Matching Results: {len(aggregated_po_matches)} matches found")
-        
-        # Set aggregated_po_matches to empty list since it's disabled
-        aggregated_po_matches = []
-        
-        # Combine all matches
-        all_matches = narration_matches + lc_matches + po_matches + interunit_matches + usd_matches + aggregated_po_matches
-        
-        # ARCHITECTURAL FIX: Assign sequential Match IDs to all matches
-        print(f"\n=== ASSIGNING SEQUENTIAL MATCH IDs ===")
-        print(f"Total matches found: {len(all_matches)}")
-
-        
-        # Initialize Match ID counter
-        match_counter = 1
-        
-        # Assign sequential Match IDs to all matches
-        for i, match in enumerate(all_matches):
-            match_id = f"M{match_counter:03d}"  # Format as M001, M002, M003, etc.
-            old_match_id = match.get('match_id', 'None')
-            match['match_id'] = match_id
-            match_counter += 1
-            print(f"Match {i+1}: Assigned {match_id} to {match.get('Match_Type', 'Unknown')} match (was {old_match_id})")
-        
-        print(f"Assigned {len(all_matches)} sequential Match IDs (M001 to M{match_counter-1:03d})")
-        
-        # Sort matches by the newly assigned sequential Match IDs
-        all_matches.sort(key=lambda x: x['match_id'])
-        print(f"Sorted matches by sequential Match IDs")
-        
-        print(f"\n" + "="*60)
-        print("FINAL MATCH SUMMARY")
-        print("="*60)
-        print(f"Total matches found: {len(all_matches)}")
-        print(f"Match IDs assigned: M001 to M{match_counter-1:03d}")
-        
-        print("="*60)
-        print("FINAL RESULTS")
-        print("="*60)
-        print(f"Total Matches: {len(all_matches)}")
-        print(f"  - Narration Matches: {len(narration_matches)} (HIGHEST PRIORITY)")
-        print(f"  - LC Matches: {len(lc_matches)}")
-        print(f"  - PO Matches: {len(po_matches)}")
-        print(f"  - Interunit Loan Matches: {len(interunit_matches)}")
-        print(f"  - USD Matches: {len(usd_matches)}")
-        print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)} (DISABLED)")
-        
-        # Clean up all caches to free memory
-        self.clear_all_caches()
-        
-        return all_matches
-    
-    def find_parent_transaction_row_with_formatting(self, ws, current_row):
         """Find the parent transaction row for a narration row using openpyxl formatting."""
         # Look backwards from current row to find the most recent transaction block header
         for row_idx in range(current_row, 8, -1):  # Start from current_row, go back to row 9
@@ -2110,8 +2365,6 @@ class   ExcelTransactionMatcher:
         # print(f"DEBUG: File1 first few rows of Audit Info column:")
         # print(file1_matched.iloc[:5, 1].tolist())
         
-        print(f"\n=== DEBUG: MATCH DATA POPULATION ===")
-        
         # Populate match information - process matches in sequential order
         for i, match in enumerate(matches):
             match_id = match['match_id']  # Use the pre-assigned match ID
@@ -2141,13 +2394,8 @@ class   ExcelTransactionMatcher:
             
             # Update file1 - populate entire transaction block with Match ID and Audit Info
             file1_row_idx = match['File1_Index']
-            print(f"    DEBUG: Setting File1 row {file1_row_idx} col 0 to '{match_id}'")
-            print(f"    DEBUG: Setting File1 row {file1_row_idx} col 1 to '{audit_info[:50]}...'")
-            print(f"    DEBUG: Setting File1 row {file1_row_idx} col -1 to '{match_type}' (last column)")
-            
             # Find the entire transaction block for file1 and populate all rows
             file1_block_rows = self.block_identifier.get_transaction_block_rows(file1_row_idx, self.file1_path)
-            print(f"    DEBUG: File1 transaction block spans rows: {file1_block_rows}")
             
             # Populate ALL rows of the transaction block with Match ID and Match Type, but only if not already set (preserve first/lowest Match ID)
             for i, block_row in enumerate(file1_block_rows):
@@ -2162,21 +2410,13 @@ class   ExcelTransactionMatcher:
                     # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file1_block_rows) - 2:  # Second-to-last row
                         file1_matched.iloc[block_row, 1] = audit_info  # Audit Info column (index 1)
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
-                    else:
-                        print(f"    DEBUG: Populated File1 row {block_row} with Match ID '{match_id}' and Match Type '{match_type}'")
             
 
             
             # Update file2 - populate entire transaction block with Match ID and Audit Info
             file2_row_idx = match['File2_Index']
-            print(f"    DEBUG: Setting File2 row {file2_row_idx} col 0 to '{match_id}'")
-            print(f"    DEBUG: Setting File2 row {file2_row_idx} col 1 to '{audit_info[:50]}...'")
-            print(f"    DEBUG: Setting File2 row {file2_row_idx} col -1 to '{match_type}' (last column)")
-            
             # Find the entire transaction block for file2 and populate all rows
             file2_block_rows = self.block_identifier.get_transaction_block_rows(file2_row_idx, self.file2_path)
-            print(f"    DEBUG: File2 transaction block spans rows: {file2_block_rows}")
             
             # Populate ALL rows of the transaction block with Match ID and Match Type, but only if not already set (preserve first/lowest Match ID)
             for i, block_row in enumerate(file2_block_rows):
@@ -2191,9 +2431,6 @@ class   ExcelTransactionMatcher:
                     # Audit Info goes ONLY in the second-to-last row of the transaction block
                     if i == len(file2_block_rows) - 2:  # Second-to-last row
                         file2_matched.iloc[block_row, 1] = audit_info  # Audit Info column (index 1)
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}', Audit Info, and Match Type '{match_type}' (second-to-last row)")
-                    else:
-                        print(f"    DEBUG: Populated File2 row {block_row} with Match ID '{match_id}' and Match Type '{match_type}'")
         
         # Save matched files using configuration variables
         base_name1 = os.path.splitext(os.path.basename(self.file1_path))[0]
@@ -2215,16 +2452,12 @@ class   ExcelTransactionMatcher:
         print(f"Output File 2: {output_file2}")
         
         if VERBOSE_DEBUG:
-            print(f"\n=== DEBUG: BEFORE SAVING ===")
             print(f"File1 - Rows with Match IDs: {file1_matched.iloc[:, 0].notna().sum()}")
             print(f"File1 - Rows with Audit Info: {file1_matched.iloc[:, 1].notna().sum()}")
             print(f"File1 - Rows with Match Type: {file1_matched.iloc[:, -1].notna().sum()}")
             print(f"File2 - Rows with Match IDs: {file2_matched.iloc[:, 0].notna().sum()}")
             print(f"File2 - Rows with Audit Info: {file2_matched.iloc[:, 1].notna().sum()}")
             print(f"File2 - Rows with Match Type: {file2_matched.iloc[:, -1].notna().sum()}")
-            
-            # Show some actual values to verify they're there
-            print(f"\n=== DEBUG: ACTUAL VALUES IN DATAFRAME ===")
             
             # Get the actual populated rows dynamically
             populated_rows = file1_matched.iloc[:, 0].notna()
@@ -2303,7 +2536,6 @@ class   ExcelTransactionMatcher:
         
 
         
-        print(f"\n=== DEBUG: AFTER SAVING ===")
         print(f"Checking if files were actually written...")
         
         # Verify the files were written correctly

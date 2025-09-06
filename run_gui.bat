@@ -24,7 +24,7 @@ if errorlevel 1 (
 )
 
 REM Run the GUI application
-python run_gui.py
+python main_gui.py
 
 if errorlevel 1 (
     echo.

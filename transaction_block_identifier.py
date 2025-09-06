@@ -129,8 +129,6 @@ class TransactionBlockIdentifier:
         
         wb.close()
         
-        print(f"DEBUG: Transaction block for LC match at row {lc_match_row} spans {len(block_rows)} rows: {block_rows}")
-        print(f"DEBUG: Block starts at row {df_block_start} and includes rows up to 'Entered By :'")
         return block_rows
     
     def identify_transaction_blocks(self, transactions_df, file_path):
@@ -217,7 +215,6 @@ class TransactionBlockIdentifier:
         
         wb.close()
         
-        print(f"DEBUG: Identified {len(transaction_blocks)} transaction blocks")
         return transaction_blocks
     
     def find_transaction_block_header(self, description_row_idx, transactions_df):
