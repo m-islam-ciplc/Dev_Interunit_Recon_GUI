@@ -120,14 +120,6 @@ class MainWindow(QMainWindow):
         self.overall_progress.setValue(step)
         self.log_widget.add_log(f"{status} ({matches_found} matches found)")
     
-    def cancel_matching(self):
-        """Cancel the matching process"""
-        if self.matching_thread and self.matching_thread.isRunning():
-            self.matching_thread.cancel()
-            self.matching_thread.wait()
-            self.log_widget.add_log("Matching process cancelled by user.")
-            self.processing_widget.set_processing_state(False)
-    
     def on_matching_finished(self, matches: list, statistics: dict):
         """Handle matching completion"""
         self.current_matches = matches
@@ -200,34 +192,6 @@ class MainWindow(QMainWindow):
         self.processing_widget.set_processing_state(False)
         self.log_widget.add_log(f"Error: {error_message}")
         QMessageBox.critical(self, "Matching Error", f"An error occurred during matching:\n\n{error_message}")
-    
-    def export_files(self):
-        """Export matched files"""
-        if not self.current_matches:
-            QMessageBox.warning(self, "No Matches", "No matches to export. Please run matching first.")
-            return
-        
-        try:
-            self.log_widget.add_log("Starting export process...")
-            
-            # Create matcher instance and load only the transaction data (without matching)
-            matcher = ExcelTransactionMatcher(self.current_file1, self.current_file2)
-            
-            # Load transaction data without running matching logic
-            self.log_widget.add_log("Loading transaction data...")
-            matcher.metadata1, matcher.transactions1 = matcher.read_complex_excel(self.current_file1)
-            matcher.metadata2, matcher.transactions2 = matcher.read_complex_excel(self.current_file2)
-            
-            # Create matched files using existing matches
-            self.log_widget.add_log("Creating matched Excel files...")
-            matcher.create_matched_files(self.current_matches, matcher.transactions1, matcher.transactions2)
-            
-            self.log_widget.add_log("Excel files exported successfully!")
-            QMessageBox.information(self, "Export Complete", "Matched Excel files have been exported to the same folder as the input files.")
-            
-        except Exception as e:
-            self.log_widget.add_log(f"Export error: {str(e)}")
-            QMessageBox.critical(self, "Export Error", f"Failed to export files:\n\n{str(e)}")
     
     def open_output_folder(self):
         """Open the input file folder in file explorer"""

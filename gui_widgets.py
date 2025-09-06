@@ -164,10 +164,6 @@ class FileSelectionWidget(QWidget):
         # Enable/disable Run Match button
         self.run_match_button.setEnabled(bool(self.file1_path and self.file2_path))
     
-    def on_drop_zone_clicked(self, event):
-        """Handle click on drop zone"""
-        self.select_both_files()
-    
     def run_matching(self):
         """Trigger matching process"""
         if self.file1_path and self.file2_path:
@@ -312,11 +308,6 @@ class ProcessingWidget(QWidget):
         
         self.setLayout(layout)
     
-    def update_progress(self, step: int, status: str, matches_found: int):
-        """Update progress display"""
-        # This method is called from ProcessingWidget but we need to update overall progress
-        pass
-        
     def complete_step(self, step_name: str, matches_found: int):
         """Mark a step as completed"""
         # Map full step names to display names
