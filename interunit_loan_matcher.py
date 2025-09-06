@@ -6,6 +6,7 @@ import sys
 import argparse
 from openpyxl.styles import Alignment
 import openpyxl
+from openpyxl import load_workbook
 from matching_logic import (
     LCMatchingLogic, POMatchingLogic, USDMatchingLogic,
     InterunitLoanMatcher, AggregatedPOMatchingLogic, NarrationMatchingLogic
@@ -87,6 +88,16 @@ class   ExcelTransactionMatcher:
         self._amount_cache1 = {}
         self._amount_cache2 = {}
         
+        # Cached workbook data for performance
+        self._cached_wb1 = None
+        self._cached_ws1 = None
+        self._cached_wb2 = None
+        self._cached_ws2 = None
+        self._cached_blocks1 = None
+        self._cached_blocks2 = None
+        self._cached_formatting_data1 = None
+        self._cached_formatting_data2 = None
+        
     def read_complex_excel(self, file_path: str):
         """Read Excel file with metadata + transaction structure."""
         # Read everything as strings to preserve all formatting
@@ -117,6 +128,131 @@ class   ExcelTransactionMatcher:
             debit, credit = 0.0, 0.0
         
         return debit, credit
+    
+    def load_and_cache_workbooks(self):
+        """Load workbooks once and cache them for performance."""
+        if self._cached_wb1 is None:
+            print("Loading and caching workbooks for performance...")
+            self._cached_wb1 = load_workbook(self.file1_path)
+            self._cached_ws1 = self._cached_wb1.active
+            self._cached_wb2 = load_workbook(self.file2_path)
+            self._cached_ws2 = self._cached_wb2.active
+            print("Workbooks cached successfully")
+    
+    def get_cached_blocks(self, file_num):
+        """Get cached transaction blocks or identify them if not cached."""
+        if file_num == 1:
+            if self._cached_blocks1 is None:
+                print("Identifying transaction blocks for File 1...")
+                self._cached_blocks1 = self.block_identifier.identify_transaction_blocks(
+                    self.transactions1, self.file1_path
+                )
+                print(f"File 1: {len(self._cached_blocks1)} transaction blocks cached")
+            return self._cached_blocks1
+        else:
+            if self._cached_blocks2 is None:
+                print("Identifying transaction blocks for File 2...")
+                self._cached_blocks2 = self.block_identifier.identify_transaction_blocks(
+                    self.transactions2, self.file2_path
+                )
+                print(f"File 2: {len(self._cached_blocks2)} transaction blocks cached")
+            return self._cached_blocks2
+    
+    def get_cached_formatting_data(self, file_num):
+        """Get cached formatting data or analyze it if not cached."""
+        if file_num == 1:
+            if self._cached_formatting_data1 is None:
+                print("Analyzing formatting data for File 1...")
+                self._cached_formatting_data1 = self._analyze_formatting_data(
+                    self._cached_ws1, self._cached_blocks1
+                )
+                print(f"File 1: {len(self._cached_formatting_data1)} blocks with formatting data cached")
+            return self._cached_formatting_data1
+        else:
+            if self._cached_formatting_data2 is None:
+                print("Analyzing formatting data for File 2...")
+                self._cached_formatting_data2 = self._analyze_formatting_data(
+                    self._cached_ws2, self._cached_blocks2
+                )
+                print(f"File 2: {len(self._cached_formatting_data2)} blocks with formatting data cached")
+            return self._cached_formatting_data2
+    
+    def _analyze_formatting_data(self, worksheet, blocks):
+        """Analyze formatting data for all blocks at once."""
+        formatting_data = []
+        
+        for i, block in enumerate(blocks):
+            block_data = {
+                'block_index': i,
+                'block_rows': block,
+                'ledger_accounts': [],
+                'narration_short_codes': [],
+                'amounts': {}
+            }
+            
+            # Check each row in the block
+            for row_idx in block:
+                excel_row = row_idx + 10  # Convert to Excel row number
+                
+                if excel_row <= worksheet.max_row:
+                    cell_c = worksheet.cell(row=excel_row, column=3)  # Column C
+                    
+                    # Check for ledger accounts (Bold but not italic)
+                    if (cell_c.value and 
+                        cell_c.font and 
+                        cell_c.font.bold and 
+                        not cell_c.font.italic):
+                        
+                        # Check if this is an interunit account
+                        for full_account, short_code in self.interunit_loan_matcher.interunit_account_mapping.items():
+                            if full_account.upper() in str(cell_c.value).upper():
+                                block_data['ledger_accounts'].append({
+                                    'full_account': full_account,
+                                    'short_code': short_code,
+                                    'cell_value': cell_c.value
+                                })
+                    
+                    # Check for narration rows (Italic but not bold)
+                    elif (cell_c.value and 
+                          cell_c.font and 
+                          not cell_c.font.bold and 
+                          cell_c.font.italic):
+                        
+                        # Look for short codes in narration
+                        for short_code in self.interunit_loan_matcher.interunit_account_mapping.values():
+                            if short_code in str(cell_c.value):
+                                block_data['narration_short_codes'].append({
+                                    'short_code': short_code,
+                                    'narration': cell_c.value
+                                })
+                    
+                    # Check for amounts (Debit/Credit columns)
+                    debit_cell = worksheet.cell(row=excel_row, column=8)  # Column H
+                    credit_cell = worksheet.cell(row=excel_row, column=9)  # Column I
+                    
+                    if (debit_cell.value is not None and debit_cell.value != 0) or \
+                       (credit_cell.value is not None and credit_cell.value != 0):
+                        block_data['amounts'] = {
+                            'debit': debit_cell.value if debit_cell.value else None,
+                            'credit': credit_cell.value if credit_cell.value else None,
+                            'row': row_idx
+                        }
+            
+            if block_data['ledger_accounts'] or block_data['narration_short_codes']:
+                formatting_data.append(block_data)
+        
+        return formatting_data
+    
+    def close_cached_workbooks(self):
+        """Close cached workbooks to free memory."""
+        if self._cached_wb1:
+            self._cached_wb1.close()
+            self._cached_wb1 = None
+            self._cached_ws1 = None
+        if self._cached_wb2:
+            self._cached_wb2.close()
+            self._cached_wb2 = None
+            self._cached_ws2 = None
     
     def get_cached_block_header(self, idx, transactions_df, file_num):
         """Get transaction block header with caching for performance."""
@@ -388,6 +524,85 @@ class   ExcelTransactionMatcher:
                         })
         
         print(f"Found {len(matches)} Narration matches using optimized method")
+        return matches
+    
+    def find_interunit_matches_optimized(self, transactions1, transactions2, interunit_accounts1, interunit_accounts2, existing_matches=None, match_id_manager=None):
+        """Optimized Interunit matching using cached formatting data."""
+        matches = []
+        
+        print(f"\n=== OPTIMIZED INTERUNIT MATCHING ===")
+        print(f"Using cached formatting data for performance...")
+        
+        # Get cached formatting data
+        file1_interunit_data = self.get_cached_formatting_data(1)
+        file2_interunit_data = self.get_cached_formatting_data(2)
+        
+        print(f"File 1: {len(file1_interunit_data)} blocks with interunit data")
+        print(f"File 2: {len(file2_interunit_data)} blocks with interunit data")
+        
+        # Look for cross-referenced matches using cached data
+        print(f"\n--- Looking for cross-referenced matches ---")
+        
+        for block1 in file1_interunit_data:
+            for block2 in file2_interunit_data:
+                # Check if blocks have opposite transaction types (one debit, one credit)
+                if (block1['amounts'] and block2['amounts'] and
+                    ((block1['amounts']['debit'] and block2['amounts']['credit']) or
+                     (block1['amounts']['credit'] and block2['amounts']['debit']))):
+                    
+                    # Check if amounts match exactly (NO TOLERANCE)
+                    amount1 = block1['amounts']['debit'] if block1['amounts']['debit'] else block1['amounts']['credit']
+                    amount2 = block2['amounts']['debit'] if block2['amounts']['debit'] else block2['amounts']['credit']
+                    
+                    if amount1 == amount2:
+                        # Check for cross-referenced short codes
+                        cross_reference_found = False
+                        file1_narration_contains = None
+                        file2_narration_contains = None
+                        
+                        # File 1's narration should contain File 2's short code
+                        for narration1 in block1['narration_short_codes']:
+                            for ledger2 in block2['ledger_accounts']:
+                                if narration1['short_code'] == ledger2['short_code']:
+                                    cross_reference_found = True
+                                    file1_narration_contains = narration1['short_code']
+                                    break
+                            if cross_reference_found:
+                                break
+                        
+                        # File 2's narration should contain File 1's short code
+                        if cross_reference_found:
+                            for narration2 in block2['narration_short_codes']:
+                                for ledger1 in block1['ledger_accounts']:
+                                    if narration2['short_code'] == ledger1['short_code']:
+                                        file2_narration_contains = narration2['short_code']
+                                        
+                                        # We have a match!
+                                        match = {
+                                            'match_id': None,
+                                            'Match_Type': 'Interunit',
+                                            'Interunit_Account': f"{file1_narration_contains} <-> {file2_narration_contains}",
+                                            'File1_Index': block1['amounts']['row'],
+                                            'File2_Index': block2['amounts']['row'],
+                                            'File1_Debit': block1['amounts']['debit'],
+                                            'File1_Credit': block1['amounts']['credit'],
+                                            'File2_Debit': block2['amounts']['debit'],
+                                            'File2_Credit': block2['amounts']['credit'],
+                                            'File1_Amount': amount1,
+                                            'File2_Amount': amount1,
+                                            'Amount': amount1
+                                        }
+                                        
+                                        matches.append(match)
+                                        print(f"  MATCH: Amount {amount1}")
+                                        print(f"    Cross-reference: File 1 narration contains {file1_narration_contains}")
+                                        print(f"    Cross-reference: File 2 narration contains {file2_narration_contains}")
+                                        break
+                                
+                                if file2_narration_contains:
+                                    break
+        
+        print(f"Found {len(matches)} Interunit matches using optimized method")
         return matches
     
     def find_aggregated_po_matches_optimized(self, transactions1, transactions2, po_numbers1, po_numbers2, existing_matches=None, match_id_manager=None):
@@ -749,7 +964,7 @@ class   ExcelTransactionMatcher:
         }
 
     def process_files(self):
-        """Process both files and prepare for matching."""
+        """Process both files and prepare for matching with performance optimizations."""
         print("Reading Pole Book STEEL.xlsx...")
         self.metadata1, self.transactions1 = self.read_complex_excel(self.file1_path)
         
@@ -758,6 +973,9 @@ class   ExcelTransactionMatcher:
         
         print(f"File 1: {len(self.transactions1)} rows")
         print(f"File 2: {len(self.transactions2)} rows")
+        
+        # Load and cache workbooks once for all operations
+        self.load_and_cache_workbooks()
         
         # Preprocess amounts for performance optimization
         print("Preprocessing amounts for performance...")
@@ -768,7 +986,7 @@ class   ExcelTransactionMatcher:
         print("Creating amount indexes for fast lookup...")
         self.amount_index1 = self.create_amount_index(self.transactions1, 1)
         self.amount_index2 = self.create_amount_index(self.transactions2, 2)
-        
+
         print(f"File 1 columns: {list(self.transactions1.columns)}")
         print(f"File 2 columns: {list(self.transactions2.columns)}")
         
@@ -796,10 +1014,10 @@ class   ExcelTransactionMatcher:
         usd_amounts1 = extracted_data['usd_amounts1']
         usd_amounts2 = extracted_data['usd_amounts2']
         
-        # Identify transaction blocks using formatting
-        print("Identifying transaction blocks using formatting...")
-        blocks1 = self.block_identifier.identify_transaction_blocks(self.transactions1, self.file1_path)
-        blocks2 = self.block_identifier.identify_transaction_blocks(self.transactions2, self.file2_path)
+        # Get cached transaction blocks (identified once, reused everywhere)
+        print("Getting cached transaction blocks...")
+        blocks1 = self.get_cached_blocks(1)
+        blocks2 = self.get_cached_blocks(2)
         
         print(f"File 1: {len(blocks1)} transaction blocks")
         print(f"File 2: {len(blocks2)} transaction blocks")
@@ -932,9 +1150,9 @@ class   ExcelTransactionMatcher:
         
         # Find interunit loan matches on unmatched records with shared state
         print(f"\nSTEP 4: INTERUNIT MATCHING")
-        interunit_matches = self.interunit_loan_matcher.find_potential_matches(
+        interunit_matches = self.find_interunit_matches_optimized(
             transactions1, transactions2, interunit_accounts1_unmatched, interunit_accounts2_unmatched,
-            self.file1_path, self.file2_path, {}, None
+            {}, None
         )
         
         # print(f"\nInterunit Loan Matching Results: {len(interunit_matches)} matches found")
@@ -1062,6 +1280,9 @@ class   ExcelTransactionMatcher:
         print(f"  - USD Matches: {len(usd_matches)}")
         print(f"  - Aggregated PO Matches: {len(aggregated_po_matches)} (DISABLED)")
         
+        # Clean up cached workbooks to free memory
+        self.close_cached_workbooks()
+        
         return all_matches
     
     def find_parent_transaction_row_with_formatting(self, ws, current_row):
@@ -1137,7 +1358,7 @@ class   ExcelTransactionMatcher:
                 audit_info = f"Unknown Match Type\nLender Amount: {amount:.2f}\nBorrower Amount: {amount:.2f}"
         
         return audit_info
-    
+
     def _format_amount_columns(self, worksheet):
         """Format amount columns (Debit and Credit) to prevent scientific notation."""
         # Debit column (J) and Credit column (K) - after adding Match ID and Audit Info
